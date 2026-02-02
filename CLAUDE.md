@@ -8,14 +8,29 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: 초기 설정 완료
+- **상태**: 기초 설정 완료
 
 ## 기술 스택
 
 ```
 React 19 + Vite 7
+Tailwind CSS 4
 Capacitor 8 (iOS/Android)
+Zustand (상태관리)
+PWA (vite-plugin-pwa)
 ```
+
+## 설치된 Capacitor 플러그인
+
+| 플러그인 | 용도 |
+|---------|------|
+| @capacitor/app | 앱 생명주기, 백버튼 |
+| @capacitor/status-bar | 상태바 스타일 |
+| @capacitor/splash-screen | 스플래시 화면 |
+| @capacitor/keyboard | 키보드 이벤트 |
+| @capacitor/haptics | 진동 피드백 |
+| @capacitor/network | 네트워크 상태 |
+| @capacitor/preferences | 로컬 저장소 |
 
 ## 주요 설정값
 
@@ -28,14 +43,23 @@ Capacitor 8 (iOS/Android)
 
 ```
 src/
-├── App.jsx         # 메인 앱 컴포넌트
-├── App.css         # 앱 스타일
+├── components/     # React 컴포넌트
+├── pages/          # 페이지 컴포넌트
+├── hooks/          # 커스텀 훅
+├── lib/            # 유틸리티
+│   ├── capacitor.js  # Capacitor 초기화
+│   └── storage.js    # 저장소 유틸
+├── store/          # Zustand 스토어
+│   └── useAppStore.js
+├── constants/      # 상수
+├── App.jsx         # 메인 앱
 ├── main.jsx        # 엔트리 포인트
-└── index.css       # 글로벌 스타일
+└── index.css       # Tailwind 스타일
 
 public/             # 정적 파일
-ios/                # Capacitor iOS 프로젝트
-android/            # Capacitor Android 프로젝트
+ios/                # iOS 프로젝트
+android/            # Android 프로젝트
+.github/            # GitHub 설정 (Dependabot)
 ```
 
 ## 자주 쓰는 명령어
@@ -43,9 +67,9 @@ android/            # Capacitor Android 프로젝트
 ```bash
 npm run dev          # 로컬 개발 서버
 npm run build        # 프로덕션 빌드
-npx cap sync         # 네이티브 프로젝트 동기화
-npx cap open ios     # Xcode 열기
-npx cap open android # Android Studio 열기
+npm run cap:sync     # 빌드 + Capacitor 동기화
+npm run cap:ios      # 빌드 + iOS Xcode 열기
+npm run cap:android  # 빌드 + Android Studio 열기
 ```
 
 ## Xcode Cloud 트러블슈팅 (중요!)
@@ -63,17 +87,24 @@ npx cap open android # Android Studio 열기
 
 ### 필수 파일 (Xcode Cloud)
 
-| 파일 | 용도 |
+| 파일 | 상태 |
 |------|------|
-| `ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme` | 공유 스키마 (필수!) |
-| `ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | SPM 의존성 |
-| `ios/App/ci_scripts/ci_post_clone.sh` | 빌드 전 스크립트 |
+| `ios/App/App.xcodeproj/xcshareddata/xcschemes/App.xcscheme` | ✅ 생성됨 |
+| `ios/App/App.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | ✅ 생성됨 |
+| `ios/App/ci_scripts/ci_post_clone.sh` | ✅ 생성됨 |
 
 ---
 
 ## 작업 기록
 
-### 2026-02-03: 프로젝트 생성
-- Vite + React 초기화
+### 2026-02-03: 프로젝트 생성 및 기초 설정
+- Vite 7 + React 19 초기화
 - Capacitor 8 설치 및 iOS/Android 플랫폼 추가
-- Git 저장소 초기화
+- Tailwind CSS 4 설정
+- PWA 지원 (vite-plugin-pwa)
+- Zustand 상태관리 설정
+- 필수 Capacitor 플러그인 설치 (7개)
+- 프로젝트 구조 생성 (components, pages, hooks, lib, store, constants)
+- Xcode Cloud 필수 파일 생성 (스키마, Package.resolved, ci_post_clone.sh)
+- Dependabot 설정
+- @ 절대경로 alias 설정
