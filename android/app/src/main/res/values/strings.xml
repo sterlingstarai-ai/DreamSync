@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DreamSync</string>
+    <string name="title_activity_main">DreamSync</string>
+    <string name="package_name">com.dreamsync.app</string>
+    <string name="custom_url_scheme">com.dreamsync.app</string>
+</resources>
