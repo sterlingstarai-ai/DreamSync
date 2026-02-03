@@ -2,7 +2,7 @@
  * 온보딩 페이지
  */
 import { useState } from 'react';
-import { Moon, Sun, Sparkles, Check, ChevronRight, Bell, Heart } from 'lucide-react';
+import { Moon, Sun, Sparkles, Check, ChevronRight, Bell } from 'lucide-react';
 import { Button } from '../components/common';
 import useAuth from '../hooks/useAuth';
 import useNotifications from '../hooks/useNotifications';
