@@ -8,7 +8,7 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: Phase 1-4 구현 완료 + 검증 완료 (101 tests, 0 lint errors)
+- **상태**: Phase 1-4 구현 완료 + 품질 보증 완료 (122 tests, 14 files, 0 lint errors)
 - **배포**: https://dreamsync-app.vercel.app
 - **GitHub**: https://github.com/sterlingstarai-ai/DreamSync
 
@@ -230,13 +230,19 @@ npm run cap:android  # 빌드 + Android Studio 열기
 - 470개 에러 → 0개 에러, 24개 경고 (모두 허용 수준)
 - 28개 파일의 미사용 변수/임포트 정리
 
-#### 테스트 커버리지 (101 tests, 9 files)
+#### 테스트 커버리지 (122 tests, 14 files)
 - useAuthStore (11 tests) - 회원가입, 로그인, 설정 업데이트
 - useDreamStore (9 tests) - CRUD, 날짜 필터, 심볼 추출
 - useCheckInStore (11 tests) - CRUD, 연속 기록, 주간 완료율
 - useForecastStore (10 tests) - 생성, 정확도 계산, 중복 방지
 - useSymbolStore (14 tests) - CRUD, 검색, 동기화, 사용자 분리
 - syncQueue (5 tests) - 초기화, 큐잉, 구독
+- confidence/uhs scoring (12 tests)
+- Login (4 tests) - 렌더링, 게스트 로그인, 빈 폼 검증
+- Signup (5 tests) - 렌더링, 비밀번호 길이/불일치 검증
+- Dashboard (4 tests) - 인사말, 퀵액션, 통계, 예보 플레이스홀더
+- CheckIn (4 tests) - 단계 렌더링, 진행 표시, 단계 네비게이션
+- DreamCapture (4 tests) - 입력 폼, 저장 버튼, 빈 상태
 
 #### 버그 수정
 - 꿈 분석 → 심볼 사전 동기화 누락 (useDreamStore에서 useSymbolStore.syncSymbolsFromAnalysis 호출 추가)
@@ -247,6 +253,10 @@ npm run cap:android  # 빌드 + Android Studio 열기
 - ErrorBoundary 컴포넌트 추가 (런타임 에러 graceful 처리)
 - 오프라인 동기화 큐 (syncQueue.js + useNetworkStatus 훅)
 - OfflineBanner - 오프라인 시 화면 상단 알림 배너
+- 에러 상태 표시 - 4개 페이지에 에러 배너/토스트 추가 (Dashboard, DreamCapture, CheckIn, WeeklyReport)
+- 접근성 개선 - aria-labels, roles, aria-pressed, progressbar 속성 추가 (CheckIn, Dashboard, DreamCapture)
+- 프로덕션 로그 게이팅 - logger 유틸리티로 50+ console.* 호출 DEV 모드 전용으로 전환 (22개 파일)
+- React.lazy() + Suspense 코드 분할 (9개 라우트)
 
 #### 전체 앱 플로우 검증 (Playwright)
 - Login → Guest → Onboarding → Dashboard → DreamCapture → AI분석 → CheckIn (4단계) → Report → SymbolDictionary → Settings → Feature Flags → UHS 카드
