@@ -33,6 +33,7 @@ export const DreamAnalysisSchema = z.object({
   intensity: z.number().min(1).max(10),
   interpretation: z.string().min(10).max(500),
   actionSuggestion: z.string().optional(),
+  reflectionQuestions: z.array(z.string()).optional(),
 });
 
 /**
@@ -83,12 +84,3 @@ export function safeParse(schema, data) {
   return { success: false, error: result.error };
 }
 
-/**
- * 스키마 파싱 (에러 시 예외 발생)
- * @param {z.ZodSchema} schema
- * @param {unknown} data
- * @returns {any}
- */
-export function parse(schema, data) {
-  return schema.parse(data);
-}
