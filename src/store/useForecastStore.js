@@ -68,27 +68,18 @@ const useForecastStore = create(
 
       /**
        * 실제 결과 기록 및 정확도 계산
+       * MVP: 컨디션 기반 정확도만 사용 (스키마 정합성 보장)
        * @param {string} forecastId
        * @param {Object} actual
-       * @param {number} actual.condition
-       * @param {string[]} actual.emotions
+       * @param {number} actual.condition - 실제 컨디션 (1-5)
        */
       recordActual: (forecastId, actual) => {
         const forecast = get().forecasts.find(f => f.id === forecastId);
-        if (!forecast) return;
+        if (!forecast?.prediction) return;
 
-        // 정확도 계산 (간단한 버전)
+        // 컨디션 기반 정확도 (1-5 스케일, 차이 1당 -25%)
         const conditionDiff = Math.abs(forecast.prediction.condition - actual.condition);
-        const conditionAccuracy = Math.max(0, 100 - conditionDiff * 20);
-
-        const emotionMatches = actual.emotions.filter(e =>
-          forecast.prediction.emotions.includes(e)
-        ).length;
-        const emotionAccuracy = forecast.prediction.emotions.length > 0
-          ? (emotionMatches / forecast.prediction.emotions.length) * 100
-          : 50;
-
-        const accuracy = Math.round((conditionAccuracy * 0.6 + emotionAccuracy * 0.4));
+        const accuracy = Math.max(0, Math.round(100 - conditionDiff * 25));
 
         set((state) => ({
           forecasts: state.forecasts.map(f =>

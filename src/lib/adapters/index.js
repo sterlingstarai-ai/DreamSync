@@ -9,37 +9,32 @@
 export { default as storage, zustandStorage } from './storage';
 
 // AI Adapter
-export { setAIAdapter, getAIAdapter, getAIAdapterName } from './ai';
+import { setAIAdapter as _setAI, getAIAdapter, getAIAdapterName } from './ai';
+export { _setAI as setAIAdapter, getAIAdapter, getAIAdapterName };
 
 // Analytics Adapter
-export { default as analytics, setAnalyticsAdapter } from './analytics';
+import analyticsDefault, { setAnalyticsAdapter as _setAnalytics } from './analytics';
+export { analyticsDefault as analytics, _setAnalytics as setAnalyticsAdapter };
 
 // API Adapter
-export { setAPIAdapter, getAPIAdapter } from './api';
+import { setAPIAdapter as _setAPI, getAPIAdapter } from './api';
+export { _setAPI as setAPIAdapter, getAPIAdapter };
 
 /**
  * 모든 어댑터 초기화
  * 앱 시작 시 호출
  *
  * @param {Object} config
- * @param {string} config.ai - 'mock' | 'claude'
+ * @param {string} config.ai - 'mock' | 'edge'
  * @param {string} config.analytics - 'mock' | 'mixpanel'
  * @param {string} config.api - 'local' | 'supabase'
  */
 export function initializeAdapters(config = {}) {
   const { ai = 'mock', analytics = 'mock', api = 'local' } = config;
 
-  // AI Adapter
-  const { setAIAdapter } = require('./ai');
-  setAIAdapter(ai);
-
-  // Analytics Adapter
-  const { setAnalyticsAdapter } = require('./analytics');
-  setAnalyticsAdapter(analytics);
-
-  // API Adapter
-  const { setAPIAdapter } = require('./api');
-  setAPIAdapter(api);
+  _setAI(ai);
+  _setAnalytics(analytics);
+  _setAPI(api);
 
   console.log('[Adapters] Initialized:', { ai, analytics, api });
 }

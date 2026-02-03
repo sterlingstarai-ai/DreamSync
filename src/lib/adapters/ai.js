@@ -1,14 +1,16 @@
 /**
  * AI Adapter Interface
- * Mock AI ↔ Real AI (Claude API) 전환 가능한 구조
+ * Mock AI ↔ Edge Function AI 전환 가능한 구조
  *
  * 어댑터 패턴:
  * - MockAIAdapter: 개발/테스트용 (Phase 1)
- * - ClaudeAIAdapter: 실제 AI 연동 (Phase 2+)
+ * - EdgeAIAdapter: Edge Function 프록시 (Phase 2+)
+ *
+ * ⚠️ 보안 원칙: 클라이언트는 절대 LLM API Key를 소유하지 않는다.
+ *    Phase 2에서는 반드시 서버(Edge Function)를 통해 AI 호출.
  */
 
 import { generateMockDreamAnalysis, generateMockForecast, generateMockPatternInsights } from '../ai/mock';
-import { DreamAnalysisSchema, ForecastPredictionSchema, safeParse } from '../ai/schemas';
 
 /**
  * AI Adapter 인터페이스
@@ -25,54 +27,45 @@ const MockAIAdapter = {
   name: 'mock',
 
   async analyzeDream(content) {
-    const result = await generateMockDreamAnalysis(content);
-    const validation = safeParse(DreamAnalysisSchema, result);
-    if (!validation.success) {
-      throw new Error('Mock AI 응답 검증 실패');
-    }
-    return validation.data;
+    return generateMockDreamAnalysis(content);
   },
 
   async generateForecast({ recentDreams, recentLogs }) {
-    const result = await generateMockForecast({ recentDreams, recentLogs });
-    const validation = safeParse(ForecastPredictionSchema, result);
-    if (!validation.success) {
-      throw new Error('Mock 예보 응답 검증 실패');
-    }
-    return validation.data;
+    return generateMockForecast({ recentDreams, recentLogs });
   },
 
   async generatePatternInsights({ dreams, logs }) {
-    return await generateMockPatternInsights({ dreams, logs });
+    return generateMockPatternInsights({ dreams, logs });
   },
 };
 
 /**
- * Claude AI Adapter (Phase 2+)
- * Supabase Edge Function 또는 직접 API 호출
+ * Edge Function AI Adapter (Phase 2+)
+ * Supabase Edge Function을 통해 AI 호출 (서버 사이드에서 API Key 관리)
+ *
+ * ⚠️ 클라이언트에서 LLM API를 직접 호출하지 않음
  */
-const ClaudeAIAdapter = {
-  name: 'claude',
+const EdgeAIAdapter = {
+  name: 'edge',
 
-  async analyzeDream(content) {
-    // TODO: Phase 2에서 구현
-    // const response = await fetch('/api/analyze-dream', {
+  async analyzeDream(_content) {
+    // TODO: Phase 2 - Edge Function 엔드포인트 연동
+    // const response = await fetch('/api/v1/analyze-dream', {
     //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ content }),
+    //   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` },
+    //   body: JSON.stringify({ content: _content }),
     // });
+    // if (!response.ok) throw new Error(`Edge API error: ${response.status}`);
     // return response.json();
-    throw new Error('Claude AI Adapter not implemented yet');
+    throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
   },
 
-  async generateForecast({ recentDreams, recentLogs }) {
-    // TODO: Phase 2에서 구현
-    throw new Error('Claude AI Adapter not implemented yet');
+  async generateForecast(_params) {
+    throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
   },
 
-  async generatePatternInsights({ dreams, logs }) {
-    // TODO: Phase 2에서 구현
-    throw new Error('Claude AI Adapter not implemented yet');
+  async generatePatternInsights(_params) {
+    throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
   },
 };
 
@@ -81,7 +74,7 @@ const ClaudeAIAdapter = {
  */
 const adapters = {
   mock: MockAIAdapter,
-  claude: ClaudeAIAdapter,
+  edge: EdgeAIAdapter,
 };
 
 /**
@@ -91,7 +84,7 @@ let currentAdapter = MockAIAdapter;
 
 /**
  * AI Adapter 설정
- * @param {'mock' | 'claude'} type
+ * @param {'mock' | 'edge'} type
  */
 export function setAIAdapter(type) {
   const adapter = adapters[type];

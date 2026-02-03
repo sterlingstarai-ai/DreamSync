@@ -1,16 +1,17 @@
 /**
  * AI 서비스 추상화 레이어
- * Mock ↔ Real AI 전환 가능한 구조
+ *
+ * 단일 진입점: 모든 AI 호출은 이 서비스를 통해 수행
+ * 어댑터를 통해 mock/edge 구현체를 교체
  */
-import { generateMockDreamAnalysis, generateMockForecast, generateMockPatternInsights } from './mock';
-import { DreamAnalysisSchema, ForecastPredictionSchema, PatternInsightSchema, safeParse } from './schemas';
+import { getAIAdapter } from '../adapters/ai';
+import { DreamAnalysisSchema, ForecastPredictionSchema, safeParse } from './schemas';
 import { AppError, ERROR_CODES, withRetry } from '../utils/error';
 
 /**
  * AI 서비스 설정
  */
 const config = {
-  useMock: true, // 1단계에서는 항상 true
   maxRetries: 3,
   retryDelay: 1000,
 };
@@ -34,15 +35,8 @@ export async function analyzeDream(content) {
   }
 
   const analyze = async () => {
-    let result;
-
-    if (config.useMock) {
-      result = await generateMockDreamAnalysis(content);
-    } else {
-      // TODO: 실제 AI API 호출 (2단계)
-      // result = await callClaudeAPI(content);
-      throw new AppError('실제 AI 서비스가 아직 연결되지 않았습니다.', ERROR_CODES.AI_UNAVAILABLE);
-    }
+    const adapter = getAIAdapter();
+    const result = await adapter.analyzeDream(content);
 
     // Zod 스키마 검증
     const validation = safeParse(DreamAnalysisSchema, result);
@@ -66,14 +60,8 @@ export async function analyzeDream(content) {
  */
 export async function generateForecast({ recentDreams = [], recentLogs = [] }) {
   const generate = async () => {
-    let result;
-
-    if (config.useMock) {
-      result = await generateMockForecast({ recentDreams, recentLogs });
-    } else {
-      // TODO: 실제 AI API 호출 (2단계)
-      throw new AppError('실제 AI 서비스가 아직 연결되지 않았습니다.', ERROR_CODES.AI_UNAVAILABLE);
-    }
+    const adapter = getAIAdapter();
+    const result = await adapter.generateForecast({ recentDreams, recentLogs });
 
     // Zod 스키마 검증
     const validation = safeParse(ForecastPredictionSchema, result);
@@ -93,29 +81,12 @@ export async function generateForecast({ recentDreams = [], recentLogs = [] }) {
  * @param {Object} params
  * @param {Array} params.dreams
  * @param {Array} params.logs
- * @returns {Promise<Array>}
+ * @returns {Promise<Object>}
  */
 export async function generatePatternInsights({ dreams = [], logs = [] }) {
   const generate = async () => {
-    let results;
-
-    if (config.useMock) {
-      results = await generateMockPatternInsights({ dreams, logs });
-    } else {
-      // TODO: 실제 AI API 호출 (2단계)
-      throw new AppError('실제 AI 서비스가 아직 연결되지 않았습니다.', ERROR_CODES.AI_UNAVAILABLE);
-    }
-
-    // 각 인사이트 검증
-    const validatedResults = [];
-    for (const insight of results) {
-      const validation = safeParse(PatternInsightSchema, insight);
-      if (validation.success) {
-        validatedResults.push(validation.data);
-      }
-    }
-
-    return validatedResults;
+    const adapter = getAIAdapter();
+    return await adapter.generatePatternInsights({ dreams, logs });
   };
 
   return withRetry(generate, config.maxRetries, config.retryDelay);
@@ -126,8 +97,9 @@ export async function generatePatternInsights({ dreams = [], logs = [] }) {
  * @returns {Object}
  */
 export function getAIServiceStatus() {
+  const adapter = getAIAdapter();
   return {
-    useMock: config.useMock,
-    available: true, // Mock은 항상 사용 가능
+    adapterName: adapter.name,
+    available: true,
   };
 }
