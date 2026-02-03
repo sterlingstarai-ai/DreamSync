@@ -69,7 +69,7 @@ console.log(JSON.parse(value));
 
 ```bash
 # 환경변수 확인
-echo $VITE_AI  # mock | claude
+echo $VITE_AI  # mock | edge
 
 # Mock 모드로 전환
 VITE_AI=mock npm run dev
@@ -120,26 +120,28 @@ VITE_FLAGS=local
 
 ```env
 VITE_BACKEND=supabase
-VITE_AI=claude
+VITE_AI=edge
 VITE_ANALYTICS=mock
 VITE_FLAGS=remote
 VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_ANON_KEY=xxx
-VITE_ANTHROPIC_API_KEY=xxx
+VITE_EDGE_FUNCTION_URL=https://xxx.supabase.co/functions/v1/ai-proxy
+# ⚠️ ANTHROPIC_API_KEY는 Supabase Secrets에만 설정 (VITE_ 접두사 금지)
 ```
 
 ### Production
 
 ```env
 VITE_BACKEND=supabase
-VITE_AI=claude
+VITE_AI=edge
 VITE_ANALYTICS=mixpanel
 VITE_FLAGS=remote
 VITE_SUPABASE_URL=https://xxx.supabase.co
 VITE_SUPABASE_ANON_KEY=xxx
-VITE_ANTHROPIC_API_KEY=xxx
+VITE_EDGE_FUNCTION_URL=https://xxx.supabase.co/functions/v1/ai-proxy
 VITE_MIXPANEL_TOKEN=xxx
 VITE_SENTRY_DSN=xxx
+# ⚠️ ANTHROPIC_API_KEY는 Supabase Secrets에만 설정 (VITE_ 접두사 금지)
 ```
 
 ## 모니터링
@@ -171,10 +173,19 @@ VITE_SENTRY_DSN=xxx
 ### 로컬 데이터 백업
 
 ```javascript
-// 전체 데이터 내보내기
-import { reportService } from './lib/services';
-const data = await reportService.exportAllData();
-console.log(JSON.stringify(data));
+// 전체 데이터 내보내기 (Settings 페이지의 '데이터 내보내기' 기능과 동일)
+import useDreamStore from './store/useDreamStore';
+import useCheckInStore from './store/useCheckInStore';
+import useSymbolStore from './store/useSymbolStore';
+import useForecastStore from './store/useForecastStore';
+
+const data = {
+  dreams: useDreamStore.getState().dreams,
+  checkIns: useCheckInStore.getState().logs,
+  symbols: useSymbolStore.getState().symbols,
+  forecasts: useForecastStore.getState().forecasts,
+};
+console.log(JSON.stringify(data, null, 2));
 ```
 
 ### 로컬 데이터 복원
@@ -207,9 +218,10 @@ await Preferences.remove({ key: 'dreamsync_dreams' });
 ### AI 서비스 장애
 
 ```javascript
-// src/lib/adapters/ai.js에서 자동 폴백
-// Claude 실패 시 → Mock으로 전환
-// 사용자에게 "분석 지연" 메시지 표시
+// src/lib/adapters/ai/edge.js에서 자동 폴백
+// Edge Function 실패 시 → Mock으로 전환 (최대 5회)
+// 5회 초과 → AI_UNAVAILABLE 에러
+// 429 (rate limit) → 즉시 에러 (fallback 안 함)
 ```
 
 ### 스토리지 용량 초과
