@@ -20,6 +20,7 @@ import useDreamStore from '../store/useDreamStore';
 import useCheckInStore from '../store/useCheckInStore';
 import useSymbolStore from '../store/useSymbolStore';
 import useForecastStore from '../store/useForecastStore';
+import storage from '../lib/adapters/storage';
 
 export default function Settings() {
   const toast = useToast();
@@ -61,13 +62,15 @@ export default function Settings() {
     toast.success('데이터를 내보냈습니다');
   };
 
-  const handleDeleteAllData = () => {
+  const handleDeleteAllData = async () => {
     if (deleteText !== '삭제') return;
     useDreamStore.getState().reset();
     useCheckInStore.getState().reset();
     useSymbolStore.getState().reset();
     useForecastStore.getState().reset();
     settings.resetSettings();
+    // 스토리지 어댑터 레벨도 완전 삭제 (Capacitor Preferences 잔류 방지)
+    await storage.clear();
     setShowDeleteConfirm(false);
     setDeleteText('');
     toast.success('모든 데이터가 삭제되었습니다');
