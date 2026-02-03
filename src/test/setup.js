@@ -37,6 +37,13 @@ vi.mock('@capacitor/haptics', () => ({
   },
 }));
 
+vi.mock('@capacitor/network', () => ({
+  Network: {
+    getStatus: vi.fn().mockResolvedValue({ connected: true, connectionType: 'wifi' }),
+    addListener: vi.fn().mockReturnValue({ remove: vi.fn() }),
+  },
+}));
+
 vi.mock('@capacitor/local-notifications', () => ({
   LocalNotifications: {
     schedule: vi.fn().mockResolvedValue(undefined),
