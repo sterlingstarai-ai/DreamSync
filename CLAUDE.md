@@ -8,7 +8,9 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: Phase 1-4 코어 구현 완료 (UI/UX, Adapter 패턴, 스코어링)
+- **상태**: Phase 1-4 구현 완료 + 검증 완료 (101 tests, 0 lint errors)
+- **배포**: https://dreamsync-app.vercel.app
+- **GitHub**: https://github.com/sterlingstarai-ai/DreamSync
 
 ## 기술 스택
 
@@ -64,12 +66,13 @@ src/
 │   ├── SymbolDictionary.jsx
 │   ├── Settings.jsx
 │   └── Onboarding.jsx
-├── hooks/             # useAuth, useDreams, useCheckIn, useForecast, useSymbols, useFeatureFlags, useVoiceInput, useNotifications, useHealthKit
+├── hooks/             # useAuth, useDreams, useCheckIn, useForecast, useSymbols, useFeatureFlags, useVoiceInput, useNotifications, useHealthKit, useNetworkStatus
 ├── lib/
 │   ├── adapters/      # storage, ai, analytics, api (Adapter 패턴)
 │   ├── ai/            # schemas, mock, service, analyzeDream, generateForecast
 │   ├── health/        # healthkit (HealthKit/Health Connect 연동)
 │   ├── scoring/       # confidence, uhs (Confidence/UHS 점수 계산)
+│   ├── offline/       # syncQueue (오프라인 동기화 큐)
 │   ├── utils/         # date, error, id
 │   ├── capacitor.js
 │   └── storage.js
@@ -161,7 +164,7 @@ npm run cap:android  # 빌드 + Android Studio 열기
 
 #### UI/UX
 - 다크 모드 디자인 시스템 (CSS 변수)
-- 공통 컴포넌트 8개: Button, Card, Input, Modal, Toast, Loading, BottomNav, SafeArea
+- 공통 컴포넌트 9개: Button, Card, Input, Modal, Toast, Loading, BottomNav, SafeArea, ErrorBoundary
 - 페이지 9개: Login, Signup, Dashboard, DreamCapture, CheckIn, WeeklyReport, SymbolDictionary, Settings, Onboarding
 - Protected Route + 온보딩 플로우
 
@@ -217,6 +220,36 @@ npm run cap:android  # 빌드 + Android Studio 열기
 - `src/hooks/useHealthKit.js` - HealthKit 훅
 - 플랫폼 자동 감지 (iOS/Android/Web)
 - 수면 데이터 조회/동기화 인터페이스
+
+---
+
+### 2026-02-03: 품질 보증 및 안정성
+
+#### ESLint 정리
+- ESLint 설정 최적화 (android/ios globalIgnores, argsIgnorePattern 개선)
+- 470개 에러 → 0개 에러, 24개 경고 (모두 허용 수준)
+- 28개 파일의 미사용 변수/임포트 정리
+
+#### 테스트 커버리지 (101 tests, 9 files)
+- useAuthStore (11 tests) - 회원가입, 로그인, 설정 업데이트
+- useDreamStore (9 tests) - CRUD, 날짜 필터, 심볼 추출
+- useCheckInStore (11 tests) - CRUD, 연속 기록, 주간 완료율
+- useForecastStore (10 tests) - 생성, 정확도 계산, 중복 방지
+- useSymbolStore (14 tests) - CRUD, 검색, 동기화, 사용자 분리
+- syncQueue (5 tests) - 초기화, 큐잉, 구독
+
+#### 버그 수정
+- 꿈 분석 → 심볼 사전 동기화 누락 (useDreamStore에서 useSymbolStore.syncSymbolsFromAnalysis 호출 추가)
+- StressSlider 컴포넌트를 부모 렌더 함수 밖으로 이동 (react-hooks 위반 수정)
+- Toast의 addToast → removeToast 의존성 순서 수정
+
+#### 안정성 개선
+- ErrorBoundary 컴포넌트 추가 (런타임 에러 graceful 처리)
+- 오프라인 동기화 큐 (syncQueue.js + useNetworkStatus 훅)
+- OfflineBanner - 오프라인 시 화면 상단 알림 배너
+
+#### 전체 앱 플로우 검증 (Playwright)
+- Login → Guest → Onboarding → Dashboard → DreamCapture → AI분석 → CheckIn (4단계) → Report → SymbolDictionary → Settings → Feature Flags → UHS 카드
 
 ---
 
