@@ -25,7 +25,7 @@ export default function EmotionPicker({ value = [], onChange, maxSelect = 3 }) {
 
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
-    } catch (e) {
+    } catch {
       // 웹에서는 무시
     }
   };

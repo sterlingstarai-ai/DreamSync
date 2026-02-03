@@ -150,7 +150,7 @@ function extractEmotions(content) {
  * @param {Array} emotions
  * @returns {string[]}
  */
-function selectThemes(symbols, emotions) {
+function selectThemes(symbols, _emotions) {
   const themes = new Set();
 
   // 심볼 기반 테마
@@ -377,7 +377,7 @@ export const MockAIAdapter = {
    * @param {Object} context - 추가 컨텍스트
    * @returns {Promise<Object>}
    */
-  analyzeDream: async (content, _context = {}) => {
+  analyzeDream: async (content) => {
     return generateMockDreamAnalysis(content);
   },
 

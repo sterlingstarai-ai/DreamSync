@@ -23,7 +23,7 @@ export default function BottomNav() {
     if (Capacitor.isNativePlatform()) {
       try {
         await Haptics.impact({ style: ImpactStyle.Light });
-      } catch (e) {
+      } catch {
         // 무시
       }
     }

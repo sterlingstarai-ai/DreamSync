@@ -24,22 +24,6 @@ export default function useNotifications() {
   const [isNative, setIsNative] = useState(false);
 
   /**
-   * 초기화
-   */
-  useEffect(() => {
-    const init = async () => {
-      const native = Capacitor.isNativePlatform();
-      setIsNative(native);
-
-      if (native) {
-        await checkPermission();
-      }
-    };
-
-    init();
-  }, []);
-
-  /**
    * 권한 확인
    */
   const checkPermission = useCallback(async () => {
@@ -57,6 +41,22 @@ export default function useNotifications() {
       return false;
     }
   }, []);
+
+  /**
+   * 초기화
+   */
+  useEffect(() => {
+    const init = async () => {
+      const native = Capacitor.isNativePlatform();
+      setIsNative(native);
+
+      if (native) {
+        await checkPermission();
+      }
+    };
+
+    init();
+  }, [checkPermission]);
 
   /**
    * 권한 요청

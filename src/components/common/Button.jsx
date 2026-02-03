@@ -29,7 +29,7 @@ async function triggerHaptic() {
   if (Capacitor.isNativePlatform()) {
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
-    } catch (e) {
+    } catch {
       // 햅틱 실패 무시
     }
   }

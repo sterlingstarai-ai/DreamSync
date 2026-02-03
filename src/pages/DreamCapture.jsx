@@ -2,7 +2,7 @@
  * 꿈 기록 페이지
  */
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Moon, Mic, MicOff, Sparkles, X, ChevronDown, ChevronUp,
   Save, Loader2
@@ -18,7 +18,6 @@ import { formatFriendlyDate } from '../lib/utils/date';
 import { getIntensityLabel } from '../lib/ai/analyzeDream';
 
 export default function DreamCapture() {
-  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const toast = useToast();
 
@@ -35,7 +34,7 @@ export default function DreamCapture() {
   const {
     isSupported: voiceSupported,
     isListening,
-    fullTranscript,
+    fullTranscript: _fullTranscript,
     toggleListening,
     clearTranscript,
     error: voiceError

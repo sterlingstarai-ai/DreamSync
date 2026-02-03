@@ -40,7 +40,7 @@ const useAuthStore = create(
        * @param {string} params.password
        * @param {string} [params.name]
        */
-      signUp: async ({ email, password, name }) => {
+      signUp: async ({ email, name }) => {
         set({ isLoading: true });
 
         // 시뮬레이션 딜레이
@@ -71,7 +71,7 @@ const useAuthStore = create(
        * @param {string} params.email
        * @param {string} params.password
        */
-      signIn: async ({ email, password }) => {
+      signIn: async ({ email }) => {
         set({ isLoading: true });
 
         await new Promise(resolve => setTimeout(resolve, 500));

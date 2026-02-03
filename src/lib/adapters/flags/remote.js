@@ -78,7 +78,7 @@ async function getFlags(userId) {
         return flags;
       }
     }
-  } catch (e) {
+  } catch {
     // 로컬 캐시 무시
   }
 
@@ -94,7 +94,7 @@ async function getFlags(userId) {
       flags,
       timestamp: now,
     }));
-  } catch (e) {
+  } catch {
     // 캐시 저장 실패 무시
   }
 

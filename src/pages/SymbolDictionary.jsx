@@ -17,7 +17,6 @@ export default function SymbolDictionary() {
     topSymbols,
     searchQuery,
     totalCount,
-    stats,
     search,
     clearSearch,
     editSymbolMeaning,

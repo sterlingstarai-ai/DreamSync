@@ -125,7 +125,7 @@ export default function useVoiceInput({
 
       try {
         recognitionRef.current.start();
-      } catch (err) {
+      } catch {
         // 이미 시작된 경우 무시
         console.warn('Recognition already started');
       }

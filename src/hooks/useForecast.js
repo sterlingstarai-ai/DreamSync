@@ -1,7 +1,7 @@
 /**
  * 예보 관련 훅
  */
-import { useCallback, useMemo, useEffect } from 'react';
+import { useCallback, useMemo } from 'react';
 import useForecastStore from '../store/useForecastStore';
 import useDreamStore from '../store/useDreamStore';
 import useCheckInStore from '../store/useCheckInStore';

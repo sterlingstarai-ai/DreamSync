@@ -24,7 +24,7 @@ export default function EventChips({ value = [], onChange, maxSelect = 5 }) {
 
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
-    } catch (e) {
+    } catch {
       // 웹에서는 무시
     }
   };

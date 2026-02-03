@@ -21,7 +21,7 @@ export default function ConditionSlider({ value, onChange, label = "오늘의 �
 
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
-    } catch (e) {
+    } catch {
       // 웹에서는 무시
     }
   };

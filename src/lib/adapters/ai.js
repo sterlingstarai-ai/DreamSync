@@ -48,7 +48,7 @@ const MockAIAdapter = {
 const EdgeAIAdapter = {
   name: 'edge',
 
-  async analyzeDream(_content) {
+  async analyzeDream(/* content */) {
     // TODO: Phase 2 - Edge Function 엔드포인트 연동
     // const response = await fetch('/api/v1/analyze-dream', {
     //   method: 'POST',
@@ -60,11 +60,11 @@ const EdgeAIAdapter = {
     throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
   },
 
-  async generateForecast(_params) {
+  async generateForecast(/* params */) {
     throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
   },
 
-  async generatePatternInsights(_params) {
+  async generatePatternInsights(/* params */) {
     throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
   },
 };

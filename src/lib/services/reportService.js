@@ -56,8 +56,6 @@ function collectWeeklyData() {
   const dreamStore = useDreamStore.getState();
   const checkInStore = useCheckInStore.getState();
   const forecastStore = useForecastStore.getState();
-  const symbolStore = useSymbolStore.getState();
-
   const cutoff = getDaysAgo(7);
 
   // 최근 7일 데이터

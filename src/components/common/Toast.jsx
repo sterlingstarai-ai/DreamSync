@@ -27,6 +27,10 @@ const colors = {
 export function ToastProvider({ children }) {
   const [toasts, setToasts] = useState([]);
 
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
   const addToast = useCallback(({ type = 'info', title, message, duration = 3000 }) => {
     const id = Date.now() + Math.random();
 
@@ -39,11 +43,7 @@ export function ToastProvider({ children }) {
     }
 
     return id;
-  }, []);
-
-  const removeToast = useCallback((id) => {
-    setToasts(prev => prev.filter(t => t.id !== id));
-  }, []);
+  }, [removeToast]);
 
   const toast = {
     success: (title, message) => addToast({ type: 'success', title, message }),

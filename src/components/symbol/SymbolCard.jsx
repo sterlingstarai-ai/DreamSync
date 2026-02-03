@@ -34,7 +34,7 @@ const categoryEmojis = {
 };
 
 export default function SymbolCard({ symbol, onClick }) {
-  const { name, category, meaning, frequency, trend, lastSeen } = symbol;
+  const { name, category, meaning, frequency, trend, lastSeen: _lastSeen } = symbol;
 
   const colorClass = categoryColors[category] || categoryColors.abstract;
   const emoji = categoryEmojis[category] || '💭';

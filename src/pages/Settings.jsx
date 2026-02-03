@@ -2,7 +2,6 @@
  * 설정 페이지
  */
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   User, Bell, Moon, Shield, Info, LogOut, ChevronRight,
   Smartphone, Heart, Database, Code, ToggleLeft, ToggleRight
@@ -18,11 +17,10 @@ import useNotifications from '../hooks/useNotifications';
 import { FEATURE_FLAG_INFO } from '../constants/featureFlags';
 
 export default function Settings() {
-  const navigate = useNavigate();
   const toast = useToast();
   const { user, signOut, isLoading } = useAuth();
   const settings = useSettingsStore();
-  const { flags, isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS } = useFeatureFlags();
+  const { isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS } = useFeatureFlags();
   const { hasPermission, requestPermission } = useNotifications();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -259,14 +257,14 @@ function SettingSection({ title, children }) {
 /**
  * 설정 아이템
  */
-function SettingItem({ icon: Icon, label, value, onClick }) {
+function SettingItem({ icon: ItemIcon, label, value, onClick }) {
   return (
     <button
       onClick={onClick}
       disabled={!onClick}
       className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[var(--bg-tertiary)] transition-colors disabled:cursor-default"
     >
-      <Icon className="w-5 h-5 text-[var(--text-muted)]" />
+      <ItemIcon className="w-5 h-5 text-[var(--text-muted)]" />
       <span className="flex-1 text-left text-[var(--text-primary)]">
         {label}
       </span>
@@ -283,10 +281,10 @@ function SettingItem({ icon: Icon, label, value, onClick }) {
 /**
  * 설정 토글
  */
-function SettingToggle({ icon: Icon, label, description, enabled, onChange }) {
+function SettingToggle({ icon: ToggleIcon, label, description, enabled, onChange }) {
   return (
     <div className="flex items-center gap-3 px-4 py-3">
-      <Icon className="w-5 h-5 text-[var(--text-muted)]" />
+      <ToggleIcon className="w-5 h-5 text-[var(--text-muted)]" />
       <div className="flex-1">
         <p className="text-[var(--text-primary)]">{label}</p>
         {description && (

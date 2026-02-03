@@ -1,7 +1,7 @@
 /**
  * 주간 리포트 페이지
  */
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Moon, Calendar, TrendingUp, TrendingDown,
@@ -14,8 +14,8 @@ import BottomNav from '../components/common/BottomNav';
 import useDreams from '../hooks/useDreams';
 import useCheckIn from '../hooks/useCheckIn';
 import useForecast from '../hooks/useForecast';
-import { getWeekRange, formatDate, getRecentDays, getShortDayName } from '../lib/utils/date';
-import { getEmotionById, EMOTIONS } from '../constants/emotions';
+import { formatDate, getRecentDays, getShortDayName } from '../lib/utils/date';
+import { getEmotionById } from '../constants/emotions';
 
 export default function WeeklyReport() {
   const navigate = useNavigate();
@@ -114,7 +114,7 @@ export default function WeeklyReport() {
               </h2>
               <Card padding="lg">
                 <div className="flex items-end justify-between h-32">
-                  {conditionByDay.map((day, i) => (
+                  {conditionByDay.map((day) => (
                     <div key={day.date} className="flex flex-col items-center gap-2">
                       <div
                         className="w-8 rounded-t-lg transition-all"
@@ -142,7 +142,7 @@ export default function WeeklyReport() {
                 </h2>
                 <Card padding="lg">
                   <div className="space-y-3">
-                    {emotionStats.map((emotion, i) => (
+                    {emotionStats.map((emotion) => (
                       <div key={emotion.id} className="flex items-center gap-3">
                         <span className="text-2xl">{emotion.emoji}</span>
                         <div className="flex-1">
@@ -179,7 +179,7 @@ export default function WeeklyReport() {
                 </h2>
                 <Card padding="lg">
                   <div className="flex flex-wrap gap-2">
-                    {topSymbols.map((symbol, i) => (
+                    {topSymbols.map((symbol) => (
                       <button
                         key={symbol.name}
                         onClick={() => navigate('/symbols')}
@@ -224,7 +224,7 @@ export default function WeeklyReport() {
 /**
  * 요약 통계 카드
  */
-function SummaryCard({ icon: Icon, label, value, unit, trend }) {
+function SummaryCard({ icon: SummaryIcon, label, value, unit, trend }) {
   return (
     <Card padding="md">
       <div className="flex items-start justify-between">
@@ -238,7 +238,7 @@ function SummaryCard({ icon: Icon, label, value, unit, trend }) {
           </p>
         </div>
         <div className="flex items-center gap-1">
-          <Icon className="w-4 h-4 text-[var(--text-muted)]" />
+          <SummaryIcon className="w-4 h-4 text-[var(--text-muted)]" />
           {trend === 'up' && <TrendingUp className="w-4 h-4 text-emerald-400" />}
           {trend === 'down' && <TrendingDown className="w-4 h-4 text-red-400" />}
         </div>

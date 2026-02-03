@@ -18,7 +18,7 @@ export default function FeatureToggle({
 
     try {
       await Haptics.impact({ style: ImpactStyle.Light });
-    } catch (e) {
+    } catch {
       // 웹에서는 무시
     }
   };

@@ -44,7 +44,9 @@ export default function CheckIn() {
     if (Capacitor.isNativePlatform()) {
       try {
         await Haptics.impact({ style: ImpactStyle.Light });
-      } catch (e) {}
+      } catch {
+        // 웹에서는 무시
+      }
     }
   };
 

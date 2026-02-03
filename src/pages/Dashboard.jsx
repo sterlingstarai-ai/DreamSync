@@ -18,7 +18,7 @@ import useDreams from '../hooks/useDreams';
 import useCheckIn from '../hooks/useCheckIn';
 import useForecast from '../hooks/useForecast';
 import useFeatureFlags from '../hooks/useFeatureFlags';
-import { formatFriendlyDate, getTodayString } from '../lib/utils/date';
+import { formatFriendlyDate } from '../lib/utils/date';
 import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast';
 
 export default function Dashboard() {
@@ -246,7 +246,7 @@ function ForecastCard({ forecast, isLoading }) {
 /**
  * Quick Action 카드
  */
-function QuickActionCard({ icon: Icon, label, sublabel, onClick, highlight, completed }) {
+function QuickActionCard({ icon: ActionIcon, label, sublabel, onClick, highlight, completed }) {
   return (
     <Card
       variant={highlight ? 'gradient' : 'default'}
@@ -266,7 +266,7 @@ function QuickActionCard({ icon: Icon, label, sublabel, onClick, highlight, comp
             }
           `}
         >
-          <Icon
+          <ActionIcon
             className={`w-6 h-6 ${
               completed
                 ? 'text-emerald-400'
@@ -286,11 +286,11 @@ function QuickActionCard({ icon: Icon, label, sublabel, onClick, highlight, comp
 /**
  * 통계 카드
  */
-function StatCard({ label, value, unit, icon: Icon }) {
+function StatCard({ label, value, unit, icon: StatIcon }) {
   return (
     <Card padding="md">
       <div className="flex flex-col items-center text-center">
-        <Icon className="w-5 h-5 text-[var(--text-muted)] mb-1" />
+        <StatIcon className="w-5 h-5 text-[var(--text-muted)] mb-1" />
         <span className="text-xl font-bold text-[var(--text-primary)]">
           {value}
           <span className="text-sm font-normal text-[var(--text-muted)]">

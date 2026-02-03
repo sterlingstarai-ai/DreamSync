@@ -15,13 +15,6 @@ export default function ConfidenceMeter({ value, size = 'md', light = false, sho
     return 'text-accent-danger';
   };
 
-  const getBgColor = () => {
-    if (confidence >= 80) return 'bg-accent-success';
-    if (confidence >= 60) return 'bg-accent-secondary';
-    if (confidence >= 40) return 'bg-accent-warning';
-    return 'bg-accent-danger';
-  };
-
   const sizeClasses = {
     sm: {
       container: 'w-10 h-10',

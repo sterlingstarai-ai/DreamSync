@@ -8,6 +8,7 @@ import { generateId } from '../lib/utils/id';
 import { getTodayString, toDateString } from '../lib/utils/date';
 import { analyzeDream } from '../lib/ai/analyzeDream';
 import { zustandStorage } from '../lib/adapters/storage';
+import useSymbolStore from './useSymbolStore';
 
 const useDreamStore = create(
   persist(
@@ -80,6 +81,15 @@ const useDreamStore = create(
             ),
             isAnalyzing: false,
           }));
+
+          // 심볼 사전에 동기화
+          if (result.data.symbols?.length > 0) {
+            useSymbolStore.getState().syncSymbolsFromAnalysis(
+              dream.userId,
+              dreamId,
+              result.data.symbols,
+            );
+          }
         } else {
           set({
             isAnalyzing: false,

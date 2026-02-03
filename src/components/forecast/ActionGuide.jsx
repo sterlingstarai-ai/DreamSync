@@ -21,7 +21,7 @@ export default function ActionGuide({ actions = [], onComplete }) {
 
     try {
       await Haptics.impact({ style: ImpactStyle.Medium });
-    } catch (e) {
+    } catch {
       // 웹에서는 무시
     }
   };

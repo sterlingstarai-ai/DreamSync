@@ -71,7 +71,7 @@ function sanitizeEvent(event) {
 
   // contexts 필터링
   if (event.contexts) {
-    for (const [contextName, context] of Object.entries(event.contexts)) {
+    for (const [, context] of Object.entries(event.contexts)) {
       if (typeof context === 'object' && context !== null) {
         for (const key of Object.keys(context)) {
           if (sensitivePatterns.some(p => p.test(key))) {
