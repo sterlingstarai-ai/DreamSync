@@ -26,7 +26,7 @@ export default function Dashboard() {
   const { user } = useAuthStore();
   const { todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
   const { checkedInToday, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
-  const { todayForecast, createTodayForecast, isGenerating, error: forecastError, clearError: clearForecastError } = useForecast();
+  const { todayForecast, createTodayForecast, isGenerating, confidence: calculatedConfidence, error: forecastError, clearError: clearForecastError } = useForecast();
   const { isUHSEnabled } = useFeatureFlags();
 
   const activeError = dreamError || checkInError || forecastError;
@@ -73,6 +73,7 @@ export default function Dashboard() {
           <ForecastCard
             forecast={todayForecast}
             isLoading={isGenerating}
+            confidence={calculatedConfidence}
           />
         </section>
 
@@ -184,7 +185,7 @@ function getGreeting() {
 /**
  * 오늘의 예보 카드
  */
-function ForecastCard({ forecast, isLoading }) {
+function ForecastCard({ forecast, isLoading, confidence }) {
   if (isLoading) {
     return (
       <Card variant="gradient" padding="lg">
@@ -231,7 +232,7 @@ function ForecastCard({ forecast, isLoading }) {
               {getConditionLabel(prediction.condition)}
             </span>
             <span className="text-sm text-[var(--text-muted)]">
-              신뢰도 {prediction.confidence}%
+              신뢰도 {confidence || prediction.confidence}%
             </span>
           </div>
         </div>
@@ -259,6 +260,10 @@ function ForecastCard({ forecast, isLoading }) {
           ))}
         </div>
       )}
+
+      <p className="text-xs text-[var(--text-muted)] mt-3 opacity-70">
+        데이터 기반 참고 지표이며, 의료적 조언이 아닙니다.
+      </p>
     </Card>
   );
 }

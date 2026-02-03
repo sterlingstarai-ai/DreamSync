@@ -6,6 +6,8 @@ import useForecastStore from '../store/useForecastStore';
 import useDreamStore from '../store/useDreamStore';
 import useCheckInStore from '../store/useCheckInStore';
 import useAuthStore from '../store/useAuthStore';
+import useSleepStore from '../store/useSleepStore';
+import { calculateConfidence } from '../lib/scoring/confidence';
 
 /**
  * 예보 훅
@@ -31,6 +33,7 @@ export default function useForecast() {
 
   const { getRecentDreams } = useDreamStore();
   const { getRecentLogs, getTodayLog } = useCheckInStore();
+  const sleepStore = useSleepStore();
 
   /**
    * 사용자의 모든 예보
@@ -63,6 +66,42 @@ export default function useForecast() {
     if (!userId) return 0;
     return getAverageAccuracy(userId);
   }, [userId, getAverageAccuracy, forecasts]);
+
+  /**
+   * 실시간 Confidence 점수 (웨어러블 데이터 포함)
+   */
+  const confidence = useMemo(() => {
+    if (!userId) return 0;
+    const recentDreams = getRecentDreams(userId, 7);
+    const recentLogs = getRecentLogs(userId, 7);
+    const hasWearable = sleepStore.hasWearableData();
+    const todaySleep = sleepStore.getTodaySummary();
+
+    return calculateConfidence({
+      data: {
+        dreamCount: recentDreams.length,
+        checkInCount: recentLogs.length,
+        hasWearableData: hasWearable,
+      },
+      sleep: {
+        sleepDuration: todaySleep?.totalSleepMinutes ?? undefined,
+        remPercent: todaySleep?.remMinutes != null && todaySleep?.totalSleepMinutes
+          ? (todaySleep.remMinutes / todaySleep.totalSleepMinutes) * 100
+          : undefined,
+        deepPercent: todaySleep?.deepMinutes != null && todaySleep?.totalSleepMinutes
+          ? (todaySleep.deepMinutes / todaySleep.totalSleepMinutes) * 100
+          : undefined,
+        hrv: todaySleep?.hrvMs ?? undefined,
+        isManualInput: !hasWearable,
+      },
+      consistency: {
+        accuracyHistory: userForecasts
+          .filter(f => f.accuracy !== null)
+          .map(f => f.accuracy),
+      },
+      model: {},
+    });
+  }, [userId, getRecentDreams, getRecentLogs, sleepStore, userForecasts]);
 
   /**
    * 오늘 예보 생성
@@ -128,6 +167,7 @@ export default function useForecast() {
     todayForecast,
     recentForecasts,
     stats,
+    confidence,
     isLoading,
     isGenerating,
     error,

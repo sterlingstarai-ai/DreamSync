@@ -26,7 +26,7 @@ export default function Settings() {
   const toast = useToast();
   const { user, signOut, isLoading } = useAuth();
   const settings = useSettingsStore();
-  const { isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS } = useFeatureFlags();
+  const { isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS, isAndroid } = useFeatureFlags();
   const { hasPermission, requestPermission, applyNotificationSettings } = useNotifications();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
@@ -157,18 +157,20 @@ export default function Settings() {
             />
           </SettingSection>
 
-          {/* Feature Flags (iOS용 HealthKit 등) */}
+          {/* Feature Flags (웨어러블 연동, UHS 등) */}
           {isNative && (
             <SettingSection title="실험 기능">
-              {isIOS && (
-                <SettingToggle
-                  icon={Heart}
-                  label="HealthKit 연동"
-                  description="Apple Health에서 수면 데이터 자동 수집"
-                  enabled={isEnabled('healthkit')}
-                  onChange={() => toggleFlag('healthkit')}
-                />
-              )}
+              <SettingToggle
+                icon={Heart}
+                label="웨어러블 연동"
+                description={isIOS
+                  ? 'Apple Health에서 수면 데이터 자동 수집'
+                  : isAndroid
+                    ? 'Health Connect에서 수면 데이터 자동 수집'
+                    : '건강 앱에서 수면 데이터 자동 수집'}
+                enabled={isEnabled('healthkit')}
+                onChange={() => toggleFlag('healthkit')}
+              />
               <SettingToggle
                 icon={Smartphone}
                 label="UHS 스코어"

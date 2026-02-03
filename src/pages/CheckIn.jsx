@@ -11,18 +11,29 @@ import {
 import BottomNav from '../components/common/BottomNav';
 import useCheckIn from '../hooks/useCheckIn';
 import useForecast from '../hooks/useForecast';
+import useFeatureFlags from '../hooks/useFeatureFlags';
+import useSleepStore from '../store/useSleepStore';
 import { EMOTIONS, getEmotionById } from '../constants/emotions';
 import { EVENTS, getEventsByCategory, EVENT_CATEGORIES } from '../constants/events';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
-
-const STEPS = ['condition', 'emotion', 'stress', 'events'];
+import { getTodayString } from '../lib/utils/date';
+import { Moon, Sun, Clock } from 'lucide-react';
 
 export default function CheckIn() {
   const navigate = useNavigate();
   const toast = useToast();
   const { checkedInToday, todayLog, submitCheckIn, isLoading, error: checkInError, clearError: clearCheckInError } = useCheckIn();
   const { recordActualFromCheckIn } = useForecast();
+  const { isEnabled } = useFeatureFlags();
+  const sleepStore = useSleepStore();
+
+  const healthkitEnabled = isEnabled('healthkit');
+
+  // 단계 구성: healthkit 플래그 on이면 수면 단계 추가
+  const STEPS = healthkitEnabled
+    ? ['condition', 'emotion', 'stress', 'sleep', 'events']
+    : ['condition', 'emotion', 'stress', 'events'];
 
   // 에러 발생 시 토스트 표시
   useEffect(() => {
@@ -37,6 +48,33 @@ export default function CheckIn() {
   const [selectedEmotions, setSelectedEmotions] = useState([]);
   const [stressLevel, setStressLevel] = useState(3);
   const [selectedEvents, setSelectedEvents] = useState([]);
+
+  // 수면 데이터 상태
+  const [sleepData, setSleepData] = useState({
+    bedTime: '23:00',
+    wakeTime: '07:00',
+    quality: 3,
+    duration: 480,
+    source: 'manual',
+  });
+
+  // 웨어러블 수면 데이터 자동 채움
+  useEffect(() => {
+    if (!healthkitEnabled) return;
+    const todaySummary = sleepStore.getTodaySummary();
+    if (todaySummary && todaySummary.totalSleepMinutes) {
+      setSleepData(prev => ({
+        ...prev,
+        duration: todaySummary.totalSleepMinutes,
+        quality: todaySummary.sleepQualityScore != null
+          ? Math.round(todaySummary.sleepQualityScore / 2) // 0-10 → 1-5
+          : prev.quality,
+        bedTime: todaySummary.bedTime || prev.bedTime,
+        wakeTime: todaySummary.wakeTime || prev.wakeTime,
+        source: todaySummary.source,
+      }));
+    }
+  }, [healthkitEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // 이미 체크인 했으면 완료 화면
   useEffect(() => {
@@ -74,11 +112,29 @@ export default function CheckIn() {
   };
 
   const handleSubmit = async () => {
+    // 수면 데이터 저장 (healthkit 플래그 on일 때)
+    if (healthkitEnabled) {
+      const today = getTodayString();
+      sleepStore.setSleepSummary({
+        date: today,
+        totalSleepMinutes: sleepData.duration,
+        sleepQualityScore: sleepData.quality * 2, // 1-5 → 2-10
+        remMinutes: null,
+        deepMinutes: null,
+        hrvMs: null,
+        bedTime: sleepData.bedTime,
+        wakeTime: sleepData.wakeTime,
+        source: sleepData.source,
+        fetchedAt: new Date().toISOString(),
+      });
+    }
+
     const result = await submitCheckIn({
       condition,
       emotions: selectedEmotions,
       stressLevel,
       events: selectedEvents,
+      sleep: healthkitEnabled ? sleepData : undefined,
     });
 
     if (result) {
@@ -206,6 +262,13 @@ export default function CheckIn() {
             <StressStep
               value={stressLevel}
               onChange={(v) => { setStressLevel(v); triggerHaptic(); }}
+            />
+          )}
+
+          {currentStep === 'sleep' && (
+            <SleepStep
+              data={sleepData}
+              onChange={setSleepData}
             />
           )}
 
@@ -404,6 +467,111 @@ function StressStep({ value, onChange }) {
       >
         {levels[value - 1].label}
       </p>
+    </div>
+  );
+}
+
+/**
+ * 수면 정보 단계 (healthkit 플래그 on일 때)
+ */
+function SleepStep({ data, onChange }) {
+  const handleTimeChange = (field, value) => {
+    onChange(prev => {
+      const updated = { ...prev, [field]: value, source: 'manual' };
+      // 취침/기상 시간으로 duration 자동 계산
+      if (updated.bedTime && updated.wakeTime) {
+        const [bH, bM] = updated.bedTime.split(':').map(Number);
+        const [wH, wM] = updated.wakeTime.split(':').map(Number);
+        let mins = (wH * 60 + wM) - (bH * 60 + bM);
+        if (mins <= 0) mins += 24 * 60; // 자정 넘김
+        updated.duration = mins;
+      }
+      return updated;
+    });
+  };
+
+  const hours = Math.floor(data.duration / 60);
+  const mins = data.duration % 60;
+  const qualityLabels = ['', '매우 나쁨', '나쁨', '보통', '좋음', '매우 좋음'];
+
+  return (
+    <div className="text-center">
+      <h2 className="text-xl font-semibold text-[var(--text-primary)] mb-2">
+        어젯밤 수면은 어땠나요?
+      </h2>
+      <p className="text-[var(--text-secondary)] mb-6">
+        {data.source !== 'manual' ? (
+          <span className="text-emerald-400">웨어러블 데이터가 자동으로 채워졌어요</span>
+        ) : (
+          '대략적인 수면 정보를 입력해주세요'
+        )}
+      </p>
+
+      <div className="space-y-6 max-w-sm mx-auto">
+        {/* 취침/기상 시간 */}
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] mb-2 justify-center">
+              <Moon className="w-4 h-4" aria-hidden="true" />
+              취침
+            </label>
+            <input
+              type="time"
+              value={data.bedTime}
+              onChange={(e) => handleTimeChange('bedTime', e.target.value)}
+              aria-label="취침 시간"
+              className="w-full rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] px-3 py-2.5 text-center text-[var(--text-primary)] text-lg"
+            />
+          </div>
+          <div>
+            <label className="flex items-center gap-1.5 text-sm text-[var(--text-muted)] mb-2 justify-center">
+              <Sun className="w-4 h-4" aria-hidden="true" />
+              기상
+            </label>
+            <input
+              type="time"
+              value={data.wakeTime}
+              onChange={(e) => handleTimeChange('wakeTime', e.target.value)}
+              aria-label="기상 시간"
+              className="w-full rounded-xl bg-[var(--bg-secondary)] border border-[var(--border)] px-3 py-2.5 text-center text-[var(--text-primary)] text-lg"
+            />
+          </div>
+        </div>
+
+        {/* 수면 시간 표시 */}
+        <div className="flex items-center justify-center gap-2 text-[var(--text-secondary)]">
+          <Clock className="w-4 h-4" aria-hidden="true" />
+          <span>수면 시간: <strong className="text-[var(--text-primary)]">{hours}시간 {mins > 0 ? `${mins}분` : ''}</strong></span>
+        </div>
+
+        {/* 수면 품질 */}
+        <div>
+          <p className="text-sm text-[var(--text-muted)] mb-3">수면 품질</p>
+          <div className="flex justify-center gap-2" role="radiogroup" aria-label="수면 품질 선택">
+            {[1, 2, 3, 4, 5].map((q) => (
+              <button
+                key={q}
+                onClick={() => onChange(prev => ({ ...prev, quality: q, source: 'manual' }))}
+                role="radio"
+                aria-checked={data.quality === q}
+                aria-label={`수면 품질 ${qualityLabels[q]} (${q}/5)`}
+                className={`
+                  w-11 h-11 rounded-xl transition-all flex items-center justify-center text-lg
+                  ${data.quality === q
+                    ? 'bg-violet-500/30 scale-110 shadow-lg'
+                    : 'bg-[var(--bg-secondary)] opacity-50'
+                  }
+                `}
+              >
+                {['', '😴', '😪', '😐', '😌', '🌟'][q]}
+              </button>
+            ))}
+          </div>
+          <p className="text-sm mt-2" style={{ color: data.quality >= 4 ? '#10b981' : data.quality >= 3 ? '#f59e0b' : '#ef4444' }}>
+            {qualityLabels[data.quality]}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
