@@ -2,7 +2,9 @@
  * 앱 라우터 설정
  */
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { WifiOff } from 'lucide-react';
 import useAuthStore from './store/useAuthStore';
+import useNetworkStatus from './hooks/useNetworkStatus';
 
 // 페이지 컴포넌트 (lazy loading 가능)
 import Dashboard from './pages/Dashboard';
@@ -67,9 +69,26 @@ function OnboardingRoute({ children }) {
   return children;
 }
 
+/**
+ * 오프라인 표시 배너
+ */
+function OfflineBanner() {
+  const { isOffline } = useNetworkStatus();
+
+  if (!isOffline) return null;
+
+  return (
+    <div className="fixed top-0 left-0 right-0 z-50 bg-amber-600 text-white text-center py-1.5 text-xs font-medium flex items-center justify-center gap-1.5">
+      <WifiOff className="w-3.5 h-3.5" />
+      오프라인 모드 - 데이터는 자동 저장됩니다
+    </div>
+  );
+}
+
 export default function Router() {
   return (
     <BrowserRouter>
+      <OfflineBanner />
       <Routes>
         {/* 공개 라우트 */}
         <Route

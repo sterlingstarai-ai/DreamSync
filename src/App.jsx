@@ -3,10 +3,12 @@
  */
 import { useEffect, useState } from 'react';
 import { initCapacitor } from './lib/capacitor';
+import ErrorBoundary from './components/common/ErrorBoundary';
 import { ToastProvider } from './components/common/Toast';
 import { PageLoading } from './components/common/Loading';
 import Router from './Router';
 import { initializeAdapters } from './lib/adapters';
+import { initSyncQueue } from './lib/offline/syncQueue';
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -25,6 +27,9 @@ function App() {
         };
         initializeAdapters(config);
 
+        // 오프라인 동기화 큐 초기화
+        await initSyncQueue();
+
       } catch (error) {
         console.error('App init error:', error);
       } finally {
@@ -39,9 +44,11 @@ function App() {
   }
 
   return (
-    <ToastProvider>
-      <Router />
-    </ToastProvider>
+    <ErrorBoundary>
+      <ToastProvider>
+        <Router />
+      </ToastProvider>
+    </ErrorBoundary>
   );
 }
 
