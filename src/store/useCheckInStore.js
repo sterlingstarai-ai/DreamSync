@@ -5,7 +5,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { generateId } from '../lib/utils/id';
-import { getTodayString, getRecentDays } from '../lib/utils/date';
+import { getTodayString, getRecentDays, toDateString } from '../lib/utils/date';
 import { zustandStorage } from '../lib/adapters/storage';
 
 const useCheckInStore = create(
@@ -170,7 +170,7 @@ const useCheckInStore = create(
         for (let i = 0; i < 365; i++) {
           const checkDate = new Date(today);
           checkDate.setDate(checkDate.getDate() - i);
-          const dateStr = checkDate.toISOString().split('T')[0];
+          const dateStr = toDateString(checkDate);
 
           if (dates.has(dateStr)) {
             streak++;

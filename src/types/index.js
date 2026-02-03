@@ -59,7 +59,21 @@
  * @property {number} quality - 수면 품질 (1-5)
  * @property {string} [bedTime] - 취침 시간
  * @property {string} [wakeTime] - 기상 시간
- * @property {string} source - 데이터 소스 ('manual' | 'healthkit')
+ * @property {string} source - 데이터 소스 ('manual' | 'healthkit' | 'healthconnect')
+ */
+
+/**
+ * @typedef {Object} WearableSleepSummary
+ * @property {string} date - YYYY-MM-DD (사용자 로컬 기준)
+ * @property {number|null} totalSleepMinutes - 총 수면 시간 (분)
+ * @property {number|null} sleepQualityScore - 0~10 추정값
+ * @property {number|null} remMinutes - REM 수면 (분)
+ * @property {number|null} deepMinutes - 딥 수면 (분)
+ * @property {number|null} hrvMs - 심박변이도 (ms)
+ * @property {string|null} [bedTime] - 취침 시간
+ * @property {string|null} [wakeTime] - 기상 시간
+ * @property {'manual'|'healthkit'|'healthconnect'} source - 데이터 소스
+ * @property {string} fetchedAt - ISO 8601 타임스탬프
  */
 
 /**

@@ -37,10 +37,10 @@ export const DEFAULT_FEATURE_FLAGS = {
 
 export const FEATURE_FLAG_INFO = {
   healthkit: {
-    name: 'HealthKit 연동',
-    description: 'Apple HealthKit에서 수면 데이터를 자동으로 수집합니다.',
+    name: '웨어러블 연동',
+    description: '수면 데이터를 자동으로 수집합니다. (iOS: HealthKit, Android: Health Connect)',
     phase: 2,
-    requiresPlatform: 'ios',
+    requiresPlatform: null,
   },
   saju: {
     name: '사주 분석',
