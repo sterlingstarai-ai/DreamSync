@@ -8,7 +8,7 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: Phase 1-4 구현 완료 + 품질 보증 완료 (122 tests, 14 files, 0 lint errors)
+- **상태**: Phase 1-4 + Phase 2 웨어러블 구현 완료 (204 tests, 22 files, 0 lint errors)
 - **배포**: https://dreamsync-app.vercel.app
 - **GitHub**: https://github.com/sterlingstarai-ai/DreamSync
 
@@ -261,6 +261,38 @@ npm run cap:android  # 빌드 + Android Studio 열기
 #### 전체 앱 플로우 검증 (Playwright)
 - Login → Guest → Onboarding → Dashboard → DreamCapture → AI분석 → CheckIn (4단계) → Report → SymbolDictionary → Settings → Feature Flags → UHS 카드
 
+### 2026-02-04: Phase 2 웨어러블 연동 구현
+
+#### WearableProvider 아키텍처
+- `src/lib/health/IWearableProvider.js` - JSDoc 인터페이스 정의
+- `src/lib/health/schemas.js` - WearableSleepSummary/WearableStatus Zod 스키마 + estimateSleepQuality
+- `src/lib/health/mockProvider.js` - 결정적 Mock 데이터 생성 (날짜 기반 시드)
+- `src/lib/health/healthkitProvider.js` - iOS HealthKit 스켈레톤 (capacitor-health-extended 대응)
+- `src/lib/health/healthConnectProvider.js` - Android Health Connect 스켈레톤
+- `src/lib/health/healthkit.js` - Provider Registry + 기존 API 호환 facade
+
+#### 수면 데이터 저장 + CheckIn 수면 단계
+- `src/store/useSleepStore.js` - Zustand persist 스토어, 소스 우선순위 (manual > auto), 90일 캡
+- `src/pages/CheckIn.jsx` - healthkit 플래그 on 시 수면 단계 추가 (취침/기상/품질)
+- 웨어러블 자동 채움 → 수동 수정 가능
+
+#### Confidence → UI 연결
+- `src/hooks/useForecast.js` - calculateConfidence를 실시간 계산 (wearable + dream + checkin 데이터)
+- `src/pages/Dashboard.jsx` - 계산된 confidence 표시 + "참고 지표" 면책 문구
+
+#### Settings UI 개선
+- `src/pages/Settings.jsx` - 웨어러블 토글 iOS+Android 모두 표시 (기존 iOS만)
+- `src/constants/featureFlags.js` - healthkit 플래그 → 플랫폼 무관 ('웨어러블 연동')
+
+#### 테스트 (34 신규, 총 204개)
+- WearableSleepSummary 스키마 검증 (6 tests)
+- safeParseSleepSummary (2 tests)
+- estimateSleepQuality (5 tests)
+- WearableStatus 스키마 (2 tests)
+- MockWearableProvider (6 tests)
+- useSleepStore (11 tests) - CRUD, 소스 우선순위, 90일 제한, 커버리지
+- Confidence 웨어러블 연동 (2 tests)
+
 ---
 
 ## 아키텍처 원칙
@@ -276,6 +308,14 @@ npm run cap:android  # 빌드 + Android Studio 열기
 localStorage 사용 금지 (보안/유실 위험)
 → Capacitor Preferences 사용
 → 민감 데이터는 추후 암호화 레이어 추가
+```
+
+### WearableProvider 패턴
+```
+IWearableProvider 인터페이스 → Mock/HealthKit/HealthConnect 구현체
+→ Provider Registry (healthkit.js)가 플랫폼별 자동 선택
+→ 소스 우선순위: manual > healthkit/healthconnect
+→ 데이터: WearableSleepSummary (Zod 검증)
 ```
 
 ### UHS 주의사항
