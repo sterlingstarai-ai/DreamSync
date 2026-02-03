@@ -1,49 +1,47 @@
-import { useEffect } from 'react';
-import { initCapacitor, isNative } from '@/lib/capacitor';
-import { useAppStore } from '@/store/useAppStore';
+/**
+ * DreamSync App Root
+ */
+import { useEffect, useState } from 'react';
+import { initCapacitor } from './lib/capacitor';
+import { ToastProvider } from './components/common/Toast';
+import { PageLoading } from './components/common/Loading';
+import Router from './Router';
+import { initializeAdapters } from './lib/adapters';
 
 function App() {
-  const { isLoading, setLoading } = useAppStore();
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     async function init() {
       try {
+        // Capacitor 초기화
         await initCapacitor();
+
+        // Adapter 초기화 (환경 변수 기반)
+        const config = {
+          ai: import.meta.env.VITE_AI || 'mock',
+          analytics: import.meta.env.VITE_ANALYTICS || 'mock',
+          api: import.meta.env.VITE_BACKEND || 'local',
+        };
+        initializeAdapters(config);
+
       } catch (error) {
-        console.error('Init error:', error);
+        console.error('App init error:', error);
       } finally {
-        setLoading(false);
+        setIsInitialized(true);
       }
     }
     init();
-  }, [setLoading]);
+  }, []);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent" />
-      </div>
-    );
+  if (!isInitialized) {
+    return <PageLoading message="DreamSync 로딩 중..." />;
   }
 
   return (
-    <div className="min-h-screen safe-area-top safe-area-bottom">
-      <header className="bg-indigo-600 text-white p-4">
-        <h1 className="text-xl font-bold">DreamSync</h1>
-      </header>
-
-      <main className="p-4">
-        <div className="bg-white rounded-lg shadow p-6">
-          <h2 className="text-2xl font-semibold mb-4">Welcome to DreamSync</h2>
-          <p className="text-gray-600 mb-4">
-            Your app is ready. Start building!
-          </p>
-          <p className="text-sm text-gray-400">
-            Platform: {isNative ? 'Native' : 'Web'}
-          </p>
-        </div>
-      </main>
-    </div>
+    <ToastProvider>
+      <Router />
+    </ToastProvider>
   );
 }
 

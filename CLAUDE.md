@@ -8,7 +8,7 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: 기초 설정 완료
+- **상태**: Phase 1-4 코어 구현 완료 (UI/UX, Adapter 패턴, 스코어링)
 
 ## 기술 스택
 
@@ -16,7 +16,9 @@
 React 19 + Vite 7
 Tailwind CSS 4
 Capacitor 8 (iOS/Android)
-Zustand (상태관리)
+Zustand (상태관리 + persist with Capacitor Preferences)
+Zod (AI 응답 검증)
+React Router DOM (라우팅)
 PWA (vite-plugin-pwa)
 ```
 
@@ -30,7 +32,8 @@ PWA (vite-plugin-pwa)
 | @capacitor/keyboard | 키보드 이벤트 |
 | @capacitor/haptics | 진동 피드백 |
 | @capacitor/network | 네트워크 상태 |
-| @capacitor/preferences | 로컬 저장소 |
+| @capacitor/preferences | 로컬 저장소 (Zustand persist 백엔드) |
+| @capacitor/local-notifications | 로컬 알림 |
 
 ## 주요 설정값
 
@@ -43,23 +46,45 @@ PWA (vite-plugin-pwa)
 
 ```
 src/
-├── components/     # React 컴포넌트
-├── pages/          # 페이지 컴포넌트
-├── hooks/          # 커스텀 훅
-├── lib/            # 유틸리티
-│   ├── capacitor.js  # Capacitor 초기화
-│   └── storage.js    # 저장소 유틸
-├── store/          # Zustand 스토어
-│   └── useAppStore.js
-├── constants/      # 상수
-├── App.jsx         # 메인 앱
-├── main.jsx        # 엔트리 포인트
-└── index.css       # Tailwind 스타일
+├── components/
+│   ├── common/        # Button, Card, Input, Modal, Toast, Loading, BottomNav, SafeArea
+│   ├── dream/         # DreamInput, VoiceRecorder, DreamCard, DreamAnalysis, SymbolTag
+│   ├── checkin/       # ConditionSlider, EmotionPicker, StressLevel, EventChips, SleepInput
+│   ├── forecast/      # ForecastCard, ConfidenceMeter, ActionGuide
+│   ├── report/        # WeeklyChart, PatternCard, InsightList
+│   ├── symbol/        # SymbolCard, SymbolDetail, SymbolSearch
+│   ├── uhs/           # UHSCard, UHSBreakdown
+│   └── settings/      # FeatureToggle, HealthKitSetup, ProfileSection, NotificationSettings
+├── pages/
+│   ├── Auth/          # Login, Signup
+│   ├── Dashboard.jsx
+│   ├── DreamCapture.jsx
+│   ├── CheckIn.jsx
+│   ├── WeeklyReport.jsx
+│   ├── SymbolDictionary.jsx
+│   ├── Settings.jsx
+│   └── Onboarding.jsx
+├── hooks/             # useAuth, useDreams, useCheckIn, useForecast, useSymbols, useFeatureFlags, useVoiceInput, useNotifications, useHealthKit
+├── lib/
+│   ├── adapters/      # storage, ai, analytics, api (Adapter 패턴)
+│   ├── ai/            # schemas, mock, service, analyzeDream, generateForecast
+│   ├── health/        # healthkit (HealthKit/Health Connect 연동)
+│   ├── scoring/       # confidence, uhs (Confidence/UHS 점수 계산)
+│   ├── utils/         # date, error, id
+│   ├── capacitor.js
+│   └── storage.js
+├── store/             # useAuthStore, useDreamStore, useCheckInStore, useForecastStore, useSymbolStore, useFeatureFlagStore, useSettingsStore
+├── types/             # JSDoc 타입 정의
+├── constants/         # emotions, events, featureFlags
+├── Router.jsx
+├── App.jsx
+├── main.jsx
+└── index.css          # 다크 모드 디자인 시스템
 
-public/             # 정적 파일
-ios/                # iOS 프로젝트
-android/            # Android 프로젝트
-.github/            # GitHub 설정 (Dependabot)
+public/
+ios/
+android/
+.github/
 ```
 
 ## 자주 쓰는 명령어
@@ -108,3 +133,122 @@ npm run cap:android  # 빌드 + Android Studio 열기
 - Xcode Cloud 필수 파일 생성 (스키마, Package.resolved, ci_post_clone.sh)
 - Dependabot 설정
 - @ 절대경로 alias 설정
+
+### 2026-02-03: Phase 1-4 코어 구현
+
+#### Adapter 패턴 구현 (주석 처리 대신 런타임 전환)
+- `src/lib/adapters/storage.js` - Capacitor Preferences 기반 (localStorage 대신)
+- `src/lib/adapters/ai.js` - Mock/Claude AI 전환
+- `src/lib/adapters/analytics.js` - Mock/Mixpanel 전환
+- `src/lib/adapters/api.js` - Local/Supabase 전환
+- 환경변수로 어댑터 선택: `VITE_AI`, `VITE_ANALYTICS`, `VITE_BACKEND`
+
+#### 스코어링 로직 (지침서 기반)
+- `src/lib/scoring/confidence.js`
+  - 40% 데이터 완성도 + 35% 수면 신호 + 15% 일관성 + 10% 모델 건강도
+- `src/lib/scoring/uhs.js` (UHS: Unconscious Health Score)
+  - 35% 수면 + 25% 스트레스 + 15% 꿈 + 15% 기분변동 + 10% 예측오차
+  - 의료/진단 표현 금지, "참고 지표" 고정 문구
+
+#### AI 시스템
+- Zod 스키마로 AI 응답 검증 (`src/lib/ai/schemas.js`)
+- Mock AI 응답 생성기 (한글 감정/심볼 패턴)
+- 꿈 분석 + 예보 생성 함수
+
+#### Zustand 스토어 (7개)
+- 모든 스토어 Capacitor Preferences persist 적용
+- useAuthStore, useDreamStore, useCheckInStore, useForecastStore, useSymbolStore, useFeatureFlagStore, useSettingsStore
+
+#### UI/UX
+- 다크 모드 디자인 시스템 (CSS 변수)
+- 공통 컴포넌트 8개: Button, Card, Input, Modal, Toast, Loading, BottomNav, SafeArea
+- 페이지 9개: Login, Signup, Dashboard, DreamCapture, CheckIn, WeeklyReport, SymbolDictionary, Settings, Onboarding
+- Protected Route + 온보딩 플로우
+
+#### 훅 8개
+- useAuth, useDreams, useCheckIn, useForecast, useSymbols, useFeatureFlags, useVoiceInput, useNotifications
+
+#### Feature Flags
+- healthkit (Phase 2), saju (Phase 3), uhs (Phase 4), b2b (Phase 4)
+
+### 2026-02-03: 세부 컴포넌트 구현
+
+#### Dream 컴포넌트 (5개)
+- DreamInput - 꿈 텍스트 입력 (자동 높이, 글자수 제한)
+- VoiceRecorder - 음성 녹음 (Web Speech API)
+- DreamCard - 꿈 목록 카드
+- DreamAnalysis - AI 분석 결과 표시
+- SymbolTag - 심볼 태그 (카테고리별 이모지)
+
+#### CheckIn 컴포넌트 (5개)
+- ConditionSlider - 컨디션 선택 (1-5 이모지)
+- EmotionPicker - 감정 선택 (최대 3개)
+- StressLevel - 스트레스 2축 (업무/관계)
+- EventChips - 이벤트 선택 칩
+- SleepInput - 수면 정보 입력 (취침/기상/품질)
+
+#### Forecast 컴포넌트 (3개)
+- ForecastCard - 오늘의 예보 카드 (compact/full)
+- ConfidenceMeter - 신뢰도 원형 미터
+- ActionGuide - 추천 행동 체크리스트
+
+#### Report 컴포넌트 (3개)
+- WeeklyChart - 주간 차트 (condition/stress/sleep/dream)
+- PatternCard - 패턴 카드 (트렌드 표시)
+- InsightList - 인사이트 목록
+
+#### Symbol 컴포넌트 (3개)
+- SymbolCard - 심볼 카드 (빈도/트렌드)
+- SymbolDetail - 심볼 상세 (일반/개인 의미)
+- SymbolSearch - 심볼 검색 (카테고리 필터)
+
+#### UHS 컴포넌트 (2개)
+- UHSCard - 웰니스 지수 카드 (compact/full)
+- UHSBreakdown - 상세 분석 (5개 구성요소, 개선 팁)
+
+#### Settings 컴포넌트 (4개)
+- FeatureToggle - 기능 토글 스위치
+- HealthKitSetup - 건강 앱 연동 설정
+- ProfileSection - 프로필 섹션
+- NotificationSettings - 알림 설정 (아침/저녁)
+
+#### HealthKit 연동 (Phase 2 준비)
+- `src/lib/health/healthkit.js` - Mock HealthKit/Health Connect
+- `src/hooks/useHealthKit.js` - HealthKit 훅
+- 플랫폼 자동 감지 (iOS/Android/Web)
+- 수면 데이터 조회/동기화 인터페이스
+
+---
+
+## 아키텍처 원칙
+
+### Adapter 패턴 (중요!)
+```
+절대 주석 처리로 "나중에 연동" 하지 않음
+→ 인터페이스 고정, 구현체 분리, env로 런타임 선택
+```
+
+### 데이터 저장
+```
+localStorage 사용 금지 (보안/유실 위험)
+→ Capacitor Preferences 사용
+→ 민감 데이터는 추후 암호화 레이어 추가
+```
+
+### UHS 주의사항
+```
+의료/진단/치료 표현 절대 금지
+→ "참고 지표", "웰니스 상태" 등 사용
+→ UHS_DISCLAIMER 상수 고정 사용
+```
+
+---
+
+## 환경 변수 (.env)
+
+```bash
+VITE_BACKEND=local    # local | supabase
+VITE_AI=mock          # mock | claude
+VITE_ANALYTICS=mock   # mock | mixpanel
+VITE_FLAGS=local      # local | remote
+```
