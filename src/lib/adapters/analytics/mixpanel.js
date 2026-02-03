@@ -90,8 +90,8 @@ function sanitizeProperties(properties) {
     const sensitiveFields = [
       'content', 'dreamContent', 'dream', 'text',
       'emotions', 'emotionDetails', 'feelings',
-      'healthData', 'sleepData', 'hrvData',
-      'personalMeaning', 'interpretation',
+      'personalMeaning', 'interpretation', 'meaning',
+      'note', 'healthData', 'sleepData', 'hrvData',
     ];
 
     if (sensitiveFields.includes(key)) {

@@ -56,10 +56,11 @@ async function initialize() {
 function sanitizeEvent(event) {
   if (!event) return event;
 
-  // 민감 필드 패턴
+  // 민감 필드 패턴 (mask.js SENSITIVE_KEYS와 동기화)
   const sensitivePatterns = [
     /dream/i, /content/i, /emotion/i, /feeling/i,
     /health/i, /sleep/i, /hrv/i, /personal/i,
+    /interpret/i, /meaning/i, /\bnote\b/i, /\btext\b/i,
   ];
 
   // extra 필터링
