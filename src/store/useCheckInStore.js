@@ -152,7 +152,7 @@ const useCheckInStore = create(
         const dates = getRecentDays(days);
         return get().logs.filter(log =>
           log.userId === userId && dates.includes(log.date)
-        ).sort((a, b) => new Date(b.date) - new Date(a.date));
+        ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       },
 
       /**
@@ -249,10 +249,15 @@ const useCheckInStore = create(
     }),
     {
       name: 'checkins',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         logs: state.logs,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );

@@ -28,7 +28,7 @@ vi.mock('../components/common', () => ({
   PageContainer: ({ children, className }) => <div className={className}>{children}</div>,
   PageHeader: ({ title, subtitle }) => <div><h1>{title}</h1><p>{subtitle}</p></div>,
   Card: ({ children, className, onClick }) => <div className={className} onClick={onClick}>{children}</div>,
-  Button: ({ children, onClick, disabled, loading, fullWidth, variant }) => (
+  Button: ({ children, onClick, disabled, loading, _fullWidth, _variant }) => (
     <button onClick={onClick} disabled={disabled || loading}>{children}</button>
   ),
   useToast: () => ({

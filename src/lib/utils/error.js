@@ -2,6 +2,7 @@
  * 에러 처리 유틸리티
  */
 import logger from './logger';
+import { maskSensitiveFields } from './mask';
 
 /**
  * 앱 에러 클래스
@@ -133,13 +134,12 @@ export function normalizeError(error) {
 export function logError(error, context = {}) {
   const normalizedError = normalizeError(error);
 
-  // 콘솔 로깅 (개발용)
+  // 콘솔 로깅 (개발용) — 민감 필드 마스킹
   logger.error('[AppError]', {
     message: normalizedError.message,
     code: normalizedError.code,
     timestamp: normalizedError.timestamp,
-    context,
-    details: normalizedError.details,
+    context: maskSensitiveFields(context),
   });
 
   // TODO: Sentry 연동 (2단계)

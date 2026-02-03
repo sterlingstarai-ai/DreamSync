@@ -5,8 +5,9 @@
 import { forwardRef, useState } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 
-const Input = forwardRef(function Input(
-  {
+/** @type {any} */
+const Input = forwardRef(function Input(/** @type {any} */ props, ref) {
+  const {
     label,
     error,
     hint,
@@ -15,10 +16,8 @@ const Input = forwardRef(function Input(
     type = 'text',
     className = '',
     containerClassName = '',
-    ...props
-  },
-  ref
-) {
+    ...rest
+  } = props;
   const [showPassword, setShowPassword] = useState(false);
   const isPassword = type === 'password';
   const inputType = isPassword ? (showPassword ? 'text' : 'password') : type;
@@ -53,7 +52,7 @@ const Input = forwardRef(function Input(
             ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}
             ${className}
           `}
-          {...props}
+          {...rest}
         />
 
         {isPassword && (
@@ -87,18 +86,17 @@ const Input = forwardRef(function Input(
 /**
  * Textarea 컴포넌트
  */
-export const Textarea = forwardRef(function Textarea(
-  {
+/** @type {any} */
+export const Textarea = forwardRef(function Textarea(/** @type {any} */ props, ref) {
+  const {
     label,
     error,
     hint,
     rows = 4,
     className = '',
     containerClassName = '',
-    ...props
-  },
-  ref
-) {
+    ...rest
+  } = props;
   return (
     <div className={`space-y-1.5 ${containerClassName}`}>
       {label && (
@@ -120,7 +118,7 @@ export const Textarea = forwardRef(function Textarea(
           ${error ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20' : ''}
           ${className}
         `}
-        {...props}
+        {...rest}
       />
 
       {error && (

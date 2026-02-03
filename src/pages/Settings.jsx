@@ -4,7 +4,8 @@
 import { useState } from 'react';
 import {
   User, Bell, Moon, Shield, Info, LogOut, ChevronRight,
-  Smartphone, Heart, Database, Code, ToggleLeft, ToggleRight
+  Smartphone, Heart, Database, Code, ToggleLeft, ToggleRight,
+  Download, Trash2
 } from 'lucide-react';
 import {
   PageContainer, PageHeader, Card, Button, Modal, useToast
@@ -15,20 +16,61 @@ import useSettingsStore from '../store/useSettingsStore';
 import useFeatureFlags from '../hooks/useFeatureFlags';
 import useNotifications from '../hooks/useNotifications';
 import { FEATURE_FLAG_INFO } from '../constants/featureFlags';
+import useDreamStore from '../store/useDreamStore';
+import useCheckInStore from '../store/useCheckInStore';
+import useSymbolStore from '../store/useSymbolStore';
+import useForecastStore from '../store/useForecastStore';
 
 export default function Settings() {
   const toast = useToast();
   const { user, signOut, isLoading } = useAuth();
   const settings = useSettingsStore();
   const { isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS } = useFeatureFlags();
-  const { hasPermission, requestPermission } = useNotifications();
+  const { hasPermission, requestPermission, applyNotificationSettings } = useNotifications();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDevMode, setShowDevMode] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
 
   const handleLogout = async () => {
     await signOut();
     toast.success('로그아웃되었습니다');
+  };
+
+  const handleExportData = () => {
+    const data = {
+      exportedAt: new Date().toISOString(),
+      version: '1.0',
+      dreams: useDreamStore.getState().dreams,
+      checkIns: useCheckInStore.getState().logs,
+      symbols: useSymbolStore.getState().symbols,
+      forecasts: useForecastStore.getState().forecasts,
+      settings: settings.getAllSettings(),
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dreamsync-export-${new Date().toISOString().split('T')[0]}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success('데이터를 내보냈습니다');
+  };
+
+  const handleDeleteAllData = () => {
+    if (deleteText !== '삭제') return;
+    useDreamStore.getState().reset();
+    useCheckInStore.getState().reset();
+    useSymbolStore.getState().reset();
+    useForecastStore.getState().reset();
+    settings.resetSettings();
+    setShowDeleteConfirm(false);
+    setDeleteText('');
+    toast.success('모든 데이터가 삭제되었습니다');
   };
 
   const handleNotificationToggle = async (enabled) => {
@@ -40,6 +82,7 @@ export default function Settings() {
       }
     }
     settings.updateNotifications({ enabled });
+    await applyNotificationSettings({ ...settings.notifications, enabled });
   };
 
   return (
@@ -132,6 +175,21 @@ export default function Settings() {
               />
             </SettingSection>
           )}
+
+          {/* 데이터 관리 */}
+          <SettingSection title="데이터 관리">
+            <SettingItem
+              icon={Download}
+              label="데이터 내보내기"
+              value="JSON"
+              onClick={handleExportData}
+            />
+            <SettingItem
+              icon={Trash2}
+              label="모든 데이터 삭제"
+              onClick={() => setShowDeleteConfirm(true)}
+            />
+          </SettingSection>
 
           {/* 정보 */}
           <SettingSection title="정보">
@@ -229,6 +287,44 @@ export default function Settings() {
             </div>
           </div>
         </Modal>
+        {/* 데이터 삭제 확인 모달 */}
+        <Modal
+          isOpen={showDeleteConfirm}
+          onClose={() => { setShowDeleteConfirm(false); setDeleteText(''); }}
+          title="모든 데이터 삭제"
+          size="sm"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => { setShowDeleteConfirm(false); setDeleteText(''); }}>
+                취소
+              </Button>
+              <Button
+                variant="danger"
+                disabled={deleteText !== '삭제'}
+                onClick={handleDeleteAllData}
+              >
+                삭제
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-[var(--text-secondary)]">
+              모든 꿈 기록, 체크인, 심볼, 예보 데이터가 영구 삭제됩니다.
+              이 작업은 되돌릴 수 없습니다.
+            </p>
+            <p className="text-sm text-[var(--text-muted)]">
+              확인하려면 아래에 <strong className="text-red-400">삭제</strong>를 입력하세요.
+            </p>
+            <input
+              type="text"
+              value={deleteText}
+              onChange={(e) => setDeleteText(e.target.value)}
+              placeholder="삭제"
+              className="w-full px-3 py-2 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] focus:outline-none focus:border-red-500"
+            />
+          </div>
+        </Modal>
       </PageContainer>
 
       <BottomNav />
@@ -257,7 +353,7 @@ function SettingSection({ title, children }) {
 /**
  * 설정 아이템
  */
-function SettingItem({ icon: ItemIcon, label, value, onClick }) {
+function SettingItem({ icon: ItemIcon, label, value = '', onClick = null }) {
   return (
     <button
       onClick={onClick}

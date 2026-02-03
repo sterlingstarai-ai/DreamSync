@@ -2,7 +2,7 @@
  * 프로필 섹션 컴포넌트
  */
 import { User, ChevronRight, LogOut } from 'lucide-react';
-import { useAuth } from '../../hooks/useAuth';
+import useAuth from '../../hooks/useAuth';
 
 export default function ProfileSection({ onEditProfile, onLogout }) {
   const { user } = useAuth();

@@ -100,7 +100,7 @@ export async function generatePatternInsights({ dreams = [], logs = [] }) {
 export function getAIServiceStatus() {
   const adapter = getAIAdapter();
   return {
-    adapterName: adapter.name,
+    adapterName: adapter.name || 'unknown',
     available: true,
   };
 }

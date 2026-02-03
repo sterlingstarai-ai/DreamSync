@@ -35,8 +35,9 @@ async function triggerHaptic() {
   }
 }
 
-const Button = forwardRef(function Button(
-  {
+/** @type {any} */
+const Button = forwardRef(function Button(/** @type {any} */ props, ref) {
+  const {
     children,
     variant = 'primary',
     size = 'md',
@@ -46,10 +47,8 @@ const Button = forwardRef(function Button(
     haptic = true,
     className = '',
     onClick,
-    ...props
-  },
-  ref
-) {
+    ...rest
+  } = props;
   const handleClick = async (e) => {
     if (disabled || loading) return;
 
@@ -74,7 +73,7 @@ const Button = forwardRef(function Button(
       `}
       disabled={disabled || loading}
       onClick={handleClick}
-      {...props}
+      {...rest}
     >
       {loading && (
         <Loader2 className="w-4 h-4 animate-spin" />

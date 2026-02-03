@@ -101,7 +101,7 @@ async function flush() {
  * 개별 작업 처리
  * Phase 1: 로컬 전용이므로 즉시 완료 처리
  * Phase 2: Supabase API 호출로 교체
- * @param {Object} item
+ * @param {Object} _item
  */
 async function processItem(_item) {
   // Phase 1: 모든 데이터는 이미 Zustand persist로 로컬 저장됨

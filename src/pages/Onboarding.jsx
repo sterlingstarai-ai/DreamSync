@@ -2,10 +2,11 @@
  * 온보딩 페이지
  */
 import { useState } from 'react';
-import { Moon, Sun, Sparkles, Check, ChevronRight, Bell } from 'lucide-react';
+import { Moon, Sparkles, Check, ChevronRight, Bell } from 'lucide-react';
 import { Button } from '../components/common';
 import useAuth from '../hooks/useAuth';
 import useNotifications from '../hooks/useNotifications';
+import { loadSampleData } from '../lib/utils/sampleData';
 
 const STEPS = [
   {
@@ -16,24 +17,10 @@ const STEPS = [
     color: '#7c3aed',
   },
   {
-    id: 'dream',
-    icon: Moon,
-    title: '아침에 꿈을 기록해요',
-    description: 'AI가 꿈 속 심볼과 감정을 분석하고\n개인화된 의미를 찾아줘요',
-    color: '#8b5cf6',
-  },
-  {
-    id: 'checkin',
-    icon: Sun,
-    title: '저녁에 30초 체크인',
-    description: '오늘의 컨디션과 감정을 기록하면\n패턴을 발견할 수 있어요',
-    color: '#f59e0b',
-  },
-  {
-    id: 'forecast',
+    id: 'how',
     icon: Sparkles,
-    title: '맞춤형 예보를 받아요',
-    description: '쌓인 데이터로 내일의 컨디션을 예측하고\n행동 가이드를 제안해드려요',
+    title: '꿈 기록 → 체크인 → 예보',
+    description: '아침에 꿈을 기록하고, 저녁에 30초 체크인\nAI가 패턴을 분석해 내일을 예측해요',
     color: '#3b82f6',
   },
   {
@@ -48,10 +35,11 @@ const STEPS = [
 
 export default function Onboarding() {
   const { completeOnboarding } = useAuth();
-  const { requestPermission, scheduleMorningReminder, scheduleEveningReminder } = useNotifications();
+  const { requestPermission, scheduleMorningReminder, scheduleEveningReminder, scheduleWeeklyReportReminder } = useNotifications();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
+  const [sampleLoaded, setSampleLoaded] = useState(false);
 
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
@@ -73,6 +61,7 @@ export default function Onboarding() {
     if (granted) {
       await scheduleMorningReminder('07:00');
       await scheduleEveningReminder('21:00');
+      await scheduleWeeklyReportReminder();
       setNotificationEnabled(true);
     }
   };
@@ -146,6 +135,23 @@ export default function Onboarding() {
                 <Bell className="w-5 h-5" />
                 알림 허용하기
               </Button>
+            )}
+
+            {/* 샘플 데이터 로드 */}
+            {!sampleLoaded ? (
+              <button
+                onClick={() => {
+                  loadSampleData('local-user');
+                  setSampleLoaded(true);
+                }}
+                className="w-full text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] py-2"
+              >
+                데모 데이터로 시작하기
+              </button>
+            ) : (
+              <p className="text-sm text-emerald-400 text-center py-2">
+                샘플 데이터가 추가되었어요
+              </p>
             )}
           </div>
         )}

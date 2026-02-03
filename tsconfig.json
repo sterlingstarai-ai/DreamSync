@@ -4,7 +4,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "allowJs": true,
-    "checkJs": false,
+    "checkJs": true,
     "noEmit": true,
     "skipLibCheck": true,
     "strict": false,
@@ -17,12 +17,15 @@
   },
   "include": [
     "src/**/*.js",
-    "src/**/*.jsx"
+    "src/**/*.jsx",
+    "src/**/*.d.ts"
   ],
   "exclude": [
     "node_modules",
     "dist",
     "ios",
-    "android"
+    "android",
+    "src/**/*.test.js",
+    "src/**/*.test.jsx"
   ]
 }

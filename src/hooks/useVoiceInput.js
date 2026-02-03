@@ -8,7 +8,7 @@ import logger from '../lib/utils/logger';
 /**
  * 음성 인식 지원 여부
  */
-const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+const SpeechRecognition = window.SpeechRecognition || /** @type {any} */ (window).webkitSpeechRecognition;
 const isSupported = !!SpeechRecognition;
 
 /**

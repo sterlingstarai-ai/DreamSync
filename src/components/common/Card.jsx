@@ -11,8 +11,9 @@ const variants = {
   gradient: 'bg-gradient-to-br from-violet-600/10 to-blue-600/10 border border-violet-500/20',
 };
 
-const Card = forwardRef(function Card(
-  {
+/** @type {any} */
+const Card = forwardRef(function Card(/** @type {any} */ props, ref) {
+  const {
     children,
     variant = 'default',
     padding = 'md',
@@ -20,10 +21,8 @@ const Card = forwardRef(function Card(
     hover = false,
     onClick,
     className = '',
-    ...props
-  },
-  ref
-) {
+    ...rest
+  } = props;
   const paddings = {
     none: '',
     sm: 'p-3',
@@ -51,7 +50,7 @@ const Card = forwardRef(function Card(
         ${className}
       `}
       onClick={onClick}
-      {...props}
+      {...rest}
     >
       {children}
     </div>

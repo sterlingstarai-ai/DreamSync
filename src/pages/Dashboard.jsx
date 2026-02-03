@@ -266,7 +266,7 @@ function ForecastCard({ forecast, isLoading }) {
 /**
  * Quick Action 카드
  */
-function QuickActionCard({ icon: ActionIcon, label, sublabel, onClick, highlight, completed }) {
+function QuickActionCard({ icon: ActionIcon, label, sublabel, onClick, highlight = false, completed = false }) {
   return (
     <Card
       variant={highlight ? 'gradient' : 'default'}

@@ -147,7 +147,7 @@ function extractEmotions(content) {
 /**
  * 테마 선택
  * @param {Array} symbols
- * @param {Array} emotions
+ * @param {Array} _emotions
  * @returns {string[]}
  */
 function selectThemes(symbols, _emotions) {
@@ -300,12 +300,13 @@ export async function generateMockForecast({ recentDreams = [], recentLogs = [] 
 
 /**
  * Mock 주간 패턴 인사이트 생성
- * @param {Object} params
- * @param {Array} params.dreams
- * @param {Array} params.logs
- * @returns {Promise<Array>}
+ * @param {Object} [params]
+ * @param {Array} [params.dreams]
+ * @param {Array} [params.logs]
+ * @param {Array} [params.checkIns]
+ * @returns {Promise<Object>}
  */
-export async function generateMockPatternInsights({ dreams = [], logs = [], checkIns = [] }) {
+export async function generateMockPatternInsights({ dreams = [], logs = [], checkIns = [] } = {}) {
   const delay = MOCK_DELAY.PATTERN.min + Math.random() * (MOCK_DELAY.PATTERN.max - MOCK_DELAY.PATTERN.min);
   await new Promise(resolve => setTimeout(resolve, delay));
 
@@ -371,13 +372,15 @@ export async function generateMockPatternInsights({ dreams = [], logs = [], chec
  * 테스트 및 개발용 Mock AI 인터페이스
  */
 export const MockAIAdapter = {
+  name: 'mock',
+
   /**
    * 꿈 분석
    * @param {string} content - 꿈 내용
-   * @param {Object} context - 추가 컨텍스트
+   * @param {Object} [_context] - 추가 컨텍스트
    * @returns {Promise<Object>}
    */
-  analyzeDream: async (content) => {
+  analyzeDream: async (content, _context) => {
     return generateMockDreamAnalysis(content);
   },
 

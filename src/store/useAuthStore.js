@@ -187,11 +187,16 @@ const useAuthStore = create(
     }),
     {
       name: 'auth',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );

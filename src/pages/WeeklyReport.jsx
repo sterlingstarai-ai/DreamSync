@@ -1,14 +1,14 @@
 /**
  * 주간 리포트 페이지
  */
-import { useMemo } from 'react';
+import { useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Moon, Calendar, TrendingUp, TrendingDown,
-  Minus, ChevronLeft, ChevronRight, Sparkles, AlertTriangle
+  Minus, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Share2
 } from 'lucide-react';
 import {
-  PageContainer, PageHeader, Card, EmptyState
+  PageContainer, PageHeader, Card, EmptyState, Button, useToast
 } from '../components/common';
 import BottomNav from '../components/common/BottomNav';
 import useDreams from '../hooks/useDreams';
@@ -19,6 +19,7 @@ import { getEmotionById } from '../constants/emotions';
 
 export default function WeeklyReport() {
   const navigate = useNavigate();
+  const toast = useToast();
   const { recentDreams, symbols, error: dreamError, clearError: clearDreamError } = useDreams();
   const { recentLogs, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
   const { stats: forecastStats, error: forecastError, clearError: clearForecastError } = useForecast();
@@ -63,12 +64,62 @@ export default function WeeklyReport() {
   // 심볼 통계
   const topSymbols = symbols.slice(0, 5);
 
+  // 공유 텍스트 생성
+  const buildShareText = useCallback(() => {
+    const lines = [
+      `DreamSync 주간 리포트`,
+      `${formatDate(weekDays[0])} - ${formatDate(weekDays[6])}`,
+      ``,
+      `꿈 기록: ${recentDreams.length}개`,
+      `체크인율: ${checkInStats.completionRate}%`,
+      `평균 컨디션: ${checkInStats.averageCondition}/5`,
+    ];
+    if (forecastStats.averageAccuracy) {
+      lines.push(`예보 정확도: ${forecastStats.averageAccuracy}%`);
+    }
+    if (emotionStats.length > 0) {
+      lines.push('', '주요 감정: ' + emotionStats.map(e => e.name).join(', '));
+    }
+    if (topSymbols.length > 0) {
+      lines.push('자주 등장한 심볼: ' + topSymbols.map(s => s.name).join(', '));
+    }
+    lines.push('', '#DreamSync');
+    return lines.join('\n');
+  }, [weekDays, recentDreams, checkInStats, forecastStats, emotionStats, topSymbols]);
+
+  const handleShare = useCallback(async () => {
+    const text = buildShareText();
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'DreamSync 주간 리포트', text });
+        return;
+      } catch {
+        // user cancelled or share failed — fall through to clipboard
+      }
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success('클립보드에 복사되었습니다');
+    } catch {
+      toast.warning('공유할 수 없습니다');
+    }
+  }, [buildShareText, toast]);
+
   return (
     <>
       <PageContainer className="pb-24">
         <PageHeader
           title="주간 리포트"
           subtitle={`${formatDate(weekDays[0])} - ${formatDate(weekDays[6])}`}
+          rightAction={
+            hasEnoughData ? (
+              <button onClick={handleShare} className="p-2 rounded-lg hover:bg-[var(--bg-tertiary)] transition-colors">
+                <Share2 className="w-5 h-5 text-[var(--text-muted)]" />
+              </button>
+            ) : null
+          }
         />
 
         {/* Error Banner */}
@@ -242,7 +293,7 @@ export default function WeeklyReport() {
 /**
  * 요약 통계 카드
  */
-function SummaryCard({ icon: SummaryIcon, label, value, unit, trend }) {
+function SummaryCard({ icon: SummaryIcon, label, value, unit, trend = null }) {
   return (
     <Card padding="md">
       <div className="flex items-start justify-between">

@@ -83,7 +83,7 @@ export function getThisWeekRange() {
  * @param {string} dateString - 주의 어느 날짜든
  * @returns {{ start: string, end: string }}
  */
-export function getWeekRange(dateString) {
+export function getWeekRange(dateString = getTodayString()) {
   const date = parseISO(dateString);
   return {
     start: toDateString(startOfWeek(date, { weekStartsOn: 1 })),
@@ -143,4 +143,31 @@ export function getDayName(dateString) {
  */
 export function getShortDayName(dateString) {
   return format(parseISO(dateString), 'EEE', { locale: ko });
+}
+
+/**
+ * N일 전 날짜 (YYYY-MM-DD)
+ * @param {number} days
+ * @returns {string}
+ */
+export function getDaysAgo(days) {
+  return toDateString(subDays(new Date(), days));
+}
+
+/**
+ * 상대적 날짜 표시 (formatRelative alias)
+ * @param {string} isoString
+ * @returns {string}
+ */
+export function formatRelativeDate(isoString) {
+  return formatRelative(isoString);
+}
+
+/**
+ * 짧은 날짜 표시 (M/d)
+ * @param {string} dateString
+ * @returns {string}
+ */
+export function formatShortDate(dateString) {
+  return format(parseISO(dateString), 'M/d');
 }

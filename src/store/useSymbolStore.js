@@ -141,7 +141,7 @@ const useSymbolStore = create(
       getRecentSymbols: (userId, limit = 10) => {
         return get().symbols
           .filter(s => s.userId === userId)
-          .sort((a, b) => new Date(b.lastSeen) - new Date(a.lastSeen))
+          .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
           .slice(0, limit);
       },
 
@@ -201,10 +201,15 @@ const useSymbolStore = create(
     }),
     {
       name: 'symbols',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         symbols: state.symbols,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );

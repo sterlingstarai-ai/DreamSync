@@ -237,10 +237,15 @@ const useDreamStore = create(
     }),
     {
       name: 'dreams',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         dreams: state.dreams,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );

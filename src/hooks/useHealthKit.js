@@ -11,7 +11,7 @@ import {
   getTodaySleepData,
   getSleepData,
 } from '../lib/health/healthkit';
-import { useFeatureFlags } from './useFeatureFlags';
+import useFeatureFlags from './useFeatureFlags';
 
 export function useHealthKit() {
   const { isEnabled } = useFeatureFlags();

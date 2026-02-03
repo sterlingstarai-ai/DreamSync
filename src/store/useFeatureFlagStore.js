@@ -131,10 +131,15 @@ const useFeatureFlagStore = create(
     }),
     {
       name: 'features',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         flags: state.flags,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );

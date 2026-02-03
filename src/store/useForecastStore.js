@@ -129,7 +129,7 @@ const useForecastStore = create(
       getRecentForecasts: (userId, limit = 7) => {
         return get().forecasts
           .filter(f => f.userId === userId)
-          .sort((a, b) => new Date(b.date) - new Date(a.date))
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
           .slice(0, limit);
       },
 
@@ -188,10 +188,15 @@ const useForecastStore = create(
     }),
     {
       name: 'forecasts',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         forecasts: state.forecasts,
       }),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );

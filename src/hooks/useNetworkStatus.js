@@ -12,7 +12,8 @@ export default function useNetworkStatus() {
   });
 
   useEffect(() => {
-    return subscribe(setStatus);
+    const unsubscribe = subscribe(setStatus);
+    return () => unsubscribe();
   }, []);
 
   return {

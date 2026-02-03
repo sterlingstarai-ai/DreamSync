@@ -2,7 +2,7 @@
  * 음성 녹음 컴포넌트
  */
 import { Mic, MicOff, Loader2 } from 'lucide-react';
-import { useVoiceInput } from '../../hooks/useVoiceInput';
+import useVoiceInput from '../../hooks/useVoiceInput';
 
 export default function VoiceRecorder({ onTranscript, onError }) {
   const { isListening, isSupported, transcript, startListening, stopListening, error } = useVoiceInput();

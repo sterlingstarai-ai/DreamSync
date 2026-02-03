@@ -27,9 +27,9 @@ export function PageContainer({ children, className = '', noPadding = false }) {
  */
 export function PageHeader({
   title,
-  subtitle,
-  leftAction,
-  rightAction,
+  subtitle = '',
+  leftAction = null,
+  rightAction = null,
   className = '',
 }) {
   return (
@@ -92,8 +92,8 @@ export function BottomFixedArea({ children, className = '' }) {
 export function EmptyState({
   icon: Icon,
   title,
-  description,
-  action,
+  description = '',
+  action = null,
   className = '',
 }) {
   return (

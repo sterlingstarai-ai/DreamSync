@@ -16,7 +16,8 @@ import logger from '../utils/logger';
 /**
  * AI Adapter 인터페이스
  * @typedef {Object} AIAdapter
- * @property {function(string): Promise<Object>} analyzeDream
+ * @property {string} name
+ * @property {function(string, Object=): Promise<Object>} analyzeDream
  * @property {function(Object): Promise<Object>} generateForecast
  * @property {function(Object): Promise<Array>} generatePatternInsights
  */

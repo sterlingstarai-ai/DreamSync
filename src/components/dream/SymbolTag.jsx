@@ -17,7 +17,7 @@ const symbolEmojis = {
   abstract: '✨',
 };
 
-export default function SymbolTag({ symbol, size = 'md', showMeaning = false, onClick }) {
+export default function SymbolTag({ symbol, size = 'md', showMeaning = false, onClick = null }) {
   const { name, category, meaning, frequency } = typeof symbol === 'string'
     ? { name: symbol, category: 'abstract' }
     : symbol;

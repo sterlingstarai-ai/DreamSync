@@ -15,7 +15,7 @@
     "cap:sync": "npm run build && npx cap sync",
     "cap:ios": "npm run build && npx cap sync ios && npx cap open ios",
     "cap:android": "npm run build && npx cap sync android && npx cap open android",
-    "verify": "npm run lint && npm run build && npm run test"
+    "verify": "npm run lint && npm run typecheck && npm run build && npm run test"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.2",

@@ -26,13 +26,13 @@ export { _setAPI as setAPIAdapter, getAPIAdapter };
  * 모든 어댑터 초기화
  * 앱 시작 시 호출
  *
- * @param {Object} config
- * @param {string} config.ai - 'mock' | 'edge'
- * @param {string} config.analytics - 'mock' | 'mixpanel'
- * @param {string} config.api - 'local' | 'supabase'
+ * @param {Object} [config]
+ * @param {'mock'|'edge'} [config.ai]
+ * @param {'mock'|'mixpanel'} [config.analytics]
+ * @param {'local'|'supabase'} [config.api]
  */
 export function initializeAdapters(config = {}) {
-  const { ai = 'mock', analytics = 'mock', api = 'local' } = config;
+  const { ai = 'mock', analytics = 'mock', api = 'local' } = /** @type {any} */ (config);
 
   _setAI(ai);
   _setAnalytics(analytics);

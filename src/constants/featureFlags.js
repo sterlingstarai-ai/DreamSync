@@ -3,6 +3,16 @@
  * Phase별 기능 활성화 통제
  */
 
+/** @type {Record<string, boolean>} */
+export const DEFAULT_FLAGS = {
+  healthkit: false,
+  saju: false,
+  uhs: false,
+  b2b: false,
+  devMode: false,
+  mockAI: true,
+};
+
 export const DEFAULT_FEATURE_FLAGS = {
   // Phase 2: HealthKit 연동
   healthkit: false,

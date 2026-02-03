@@ -130,7 +130,12 @@ const useSettingsStore = create(
     }),
     {
       name: 'settings',
+      version: 1,
       storage: createJSONStorage(() => zustandStorage),
+      migrate: (persisted, version) => {
+        if (version === 0) return { .../** @type {any} */ (persisted) };
+        return persisted;
+      },
     }
   )
 );
