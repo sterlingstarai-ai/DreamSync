@@ -8,6 +8,7 @@ import { generateId } from '../lib/utils/id';
 import { getTodayString, toDateString } from '../lib/utils/date';
 import { analyzeDream } from '../lib/ai/analyzeDream';
 import { zustandStorage } from '../lib/adapters/storage';
+import logger from '../lib/utils/logger';
 import useSymbolStore from './useSymbolStore';
 
 const useDreamStore = create(
@@ -64,7 +65,7 @@ const useDreamStore = create(
         const dream = dreams.find(d => d.id === dreamId);
 
         if (!dream) {
-          console.error('Dream not found:', dreamId);
+          logger.error('Dream not found:', dreamId);
           return;
         }
 

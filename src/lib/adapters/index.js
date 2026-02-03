@@ -5,6 +5,8 @@
  * 환경변수나 Feature Flag로 런타임에 전환 가능
  */
 
+import logger from '../utils/logger';
+
 // Storage Adapter
 export { default as storage, zustandStorage } from './storage';
 
@@ -36,5 +38,5 @@ export function initializeAdapters(config = {}) {
   _setAnalytics(analytics);
   _setAPI(api);
 
-  console.log('[Adapters] Initialized:', { ai, analytics, api });
+  logger.log('[Adapters] Initialized:', { ai, analytics, api });
 }

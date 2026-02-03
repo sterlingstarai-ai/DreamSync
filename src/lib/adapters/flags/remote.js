@@ -6,6 +6,7 @@
  */
 
 import { DEFAULT_FLAGS } from '../../../constants/featureFlags';
+import logger from '../../utils/logger';
 
 const CACHE_KEY = 'dreamsync_remote_flags';
 const CACHE_TTL = 5 * 60 * 1000; // 5분
@@ -21,7 +22,7 @@ async function fetchRemoteFlags(userId) {
   const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    console.warn('[RemoteFlags] Supabase not configured, using defaults');
+    logger.warn('[RemoteFlags] Supabase not configured, using defaults');
     return DEFAULT_FLAGS;
   }
 
@@ -51,7 +52,7 @@ async function fetchRemoteFlags(userId) {
 
     return DEFAULT_FLAGS;
   } catch (error) {
-    console.error('[RemoteFlags] Fetch failed:', error);
+    logger.error('[RemoteFlags] Fetch failed:', error);
     return DEFAULT_FLAGS;
   }
 }
@@ -117,7 +118,7 @@ async function updateFlag(userId, flagName, value) {
   const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseKey) {
-    console.warn('[RemoteFlags] Cannot update - Supabase not configured');
+    logger.warn('[RemoteFlags] Cannot update - Supabase not configured');
     return false;
   }
 
@@ -156,7 +157,7 @@ async function updateFlag(userId, flagName, value) {
 
     return true;
   } catch (error) {
-    console.error('[RemoteFlags] Update failed:', error);
+    logger.error('[RemoteFlags] Update failed:', error);
     return false;
   }
 }

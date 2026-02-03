@@ -5,6 +5,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
+import logger from '../lib/utils/logger';
 
 /**
  * 알림 ID 상수
@@ -37,7 +38,7 @@ export default function useNotifications() {
       setHasPermission(granted);
       return granted;
     } catch (error) {
-      console.error('Failed to check notification permission:', error);
+      logger.error('Failed to check notification permission:', error);
       return false;
     }
   }, []);
@@ -72,7 +73,7 @@ export default function useNotifications() {
       setHasPermission(granted);
       return granted;
     } catch (error) {
-      console.error('Failed to request notification permission:', error);
+      logger.error('Failed to request notification permission:', error);
       return false;
     }
   }, []);
@@ -111,7 +112,7 @@ export default function useNotifications() {
 
       return true;
     } catch (error) {
-      console.error('Failed to schedule morning reminder:', error);
+      logger.error('Failed to schedule morning reminder:', error);
       return false;
     }
   }, [hasPermission, requestPermission]);
@@ -150,7 +151,7 @@ export default function useNotifications() {
 
       return true;
     } catch (error) {
-      console.error('Failed to schedule evening reminder:', error);
+      logger.error('Failed to schedule evening reminder:', error);
       return false;
     }
   }, [hasPermission, requestPermission]);
@@ -187,7 +188,7 @@ export default function useNotifications() {
 
       return true;
     } catch (error) {
-      console.error('Failed to schedule weekly report reminder:', error);
+      logger.error('Failed to schedule weekly report reminder:', error);
       return false;
     }
   }, [hasPermission, requestPermission]);
@@ -201,7 +202,7 @@ export default function useNotifications() {
       await LocalNotifications.cancel({ notifications: [{ id }] });
       return true;
     } catch (error) {
-      console.error('Failed to cancel notification:', error);
+      logger.error('Failed to cancel notification:', error);
       return false;
     }
   }, []);
@@ -217,7 +218,7 @@ export default function useNotifications() {
       }
       return true;
     } catch (error) {
-      console.error('Failed to cancel all notifications:', error);
+      logger.error('Failed to cancel all notifications:', error);
       return false;
     }
   }, []);

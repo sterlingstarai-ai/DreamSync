@@ -8,6 +8,7 @@ import { generateId } from '../utils/id';
 import { getTodayString, getDaysAgo } from '../utils/date';
 import { calculateConfidence } from '../scoring';
 import { getAIAdapter } from '../adapters';
+import logger from '../utils/logger';
 import useForecastStore from '../../store/useForecastStore';
 import useDreamStore from '../../store/useDreamStore';
 import useCheckInStore from '../../store/useCheckInStore';
@@ -69,7 +70,7 @@ export async function generateTodayForecast() {
     store.addForecast(forecast);
     return forecast;
   } catch (error) {
-    console.error('[ForecastService] Generation failed:', error);
+    logger.error('[ForecastService] Generation failed:', error);
 
     // 폴백 예보
     const fallbackForecast = {

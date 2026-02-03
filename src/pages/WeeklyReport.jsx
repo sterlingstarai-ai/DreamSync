@@ -5,7 +5,7 @@ import { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Moon, Calendar, TrendingUp, TrendingDown,
-  Minus, ChevronLeft, ChevronRight, Sparkles
+  Minus, ChevronLeft, ChevronRight, Sparkles, AlertTriangle
 } from 'lucide-react';
 import {
   PageContainer, PageHeader, Card, EmptyState
@@ -19,9 +19,11 @@ import { getEmotionById } from '../constants/emotions';
 
 export default function WeeklyReport() {
   const navigate = useNavigate();
-  const { recentDreams, symbols } = useDreams();
-  const { recentLogs, stats: checkInStats } = useCheckIn();
-  const { stats: forecastStats } = useForecast();
+  const { recentDreams, symbols, error: dreamError, clearError: clearDreamError } = useDreams();
+  const { recentLogs, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
+  const { stats: forecastStats, error: forecastError, clearError: clearForecastError } = useForecast();
+
+  const activeError = dreamError || checkInError || forecastError;
 
   const weekDays = getRecentDays(7);
 
@@ -68,6 +70,22 @@ export default function WeeklyReport() {
           title="주간 리포트"
           subtitle={`${formatDate(weekDays[0])} - ${formatDate(weekDays[6])}`}
         />
+
+        {/* Error Banner */}
+        {activeError && (
+          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-400">{activeError}</p>
+            </div>
+            <button
+              onClick={() => { clearDreamError(); clearCheckInError(); clearForecastError(); }}
+              className="text-xs text-red-400/70 hover:text-red-400"
+            >
+              닫기
+            </button>
+          </div>
+        )}
 
         {!hasEnoughData ? (
           <EmptyState

@@ -6,6 +6,7 @@
  * - MockAnalyticsAdapter: 개발용 (콘솔 로깅)
  * - MixpanelAdapter: 실제 분석 (Phase 2+)
  */
+import logger from '../utils/logger';
 
 /**
  * Analytics Adapter 인터페이스
@@ -23,19 +24,19 @@ const MockAnalyticsAdapter = {
   name: 'mock',
 
   identify(userId) {
-    console.log('[Analytics] Identify:', userId);
+    logger.log('[Analytics] Identify:', userId);
   },
 
   track(event, properties = {}) {
-    console.log('[Analytics] Track:', event, properties);
+    logger.log('[Analytics] Track:', event, properties);
   },
 
   setUserProperties(properties) {
-    console.log('[Analytics] User Properties:', properties);
+    logger.log('[Analytics] User Properties:', properties);
   },
 
   reset() {
-    console.log('[Analytics] Reset');
+    logger.log('[Analytics] Reset');
   },
 };
 
@@ -48,25 +49,25 @@ const MixpanelAdapter = {
   identify(userId) {
     // TODO: Phase 2에서 구현
     // mixpanel.identify(userId);
-    console.log('[Mixpanel] Identify:', userId);
+    logger.log('[Mixpanel] Identify:', userId);
   },
 
   track(event, properties = {}) {
     // TODO: Phase 2에서 구현
     // mixpanel.track(event, properties);
-    console.log('[Mixpanel] Track:', event, properties);
+    logger.log('[Mixpanel] Track:', event, properties);
   },
 
   setUserProperties(properties) {
     // TODO: Phase 2에서 구현
     // mixpanel.people.set(properties);
-    console.log('[Mixpanel] User Properties:', properties);
+    logger.log('[Mixpanel] User Properties:', properties);
   },
 
   reset() {
     // TODO: Phase 2에서 구현
     // mixpanel.reset();
-    console.log('[Mixpanel] Reset');
+    logger.log('[Mixpanel] Reset');
   },
 };
 
@@ -90,7 +91,7 @@ let currentAdapter = MockAnalyticsAdapter;
 export function setAnalyticsAdapter(type) {
   const adapter = adapters[type];
   if (!adapter) {
-    console.warn(`Unknown analytics adapter: ${type}, falling back to mock`);
+    logger.warn(`Unknown analytics adapter: ${type}, falling back to mock`);
     currentAdapter = MockAnalyticsAdapter;
   } else {
     currentAdapter = adapter;

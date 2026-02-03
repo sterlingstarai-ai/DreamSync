@@ -11,6 +11,7 @@
  */
 
 import { generateMockDreamAnalysis, generateMockForecast, generateMockPatternInsights } from '../ai/mock';
+import logger from '../utils/logger';
 
 /**
  * AI Adapter 인터페이스
@@ -89,7 +90,7 @@ let currentAdapter = MockAIAdapter;
 export function setAIAdapter(type) {
   const adapter = adapters[type];
   if (!adapter) {
-    console.warn(`Unknown AI adapter: ${type}, falling back to mock`);
+    logger.warn(`Unknown AI adapter: ${type}, falling back to mock`);
     currentAdapter = MockAIAdapter;
   } else {
     currentAdapter = adapter;

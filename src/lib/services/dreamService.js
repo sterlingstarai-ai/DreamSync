@@ -8,6 +8,7 @@
 import { generateId } from '../utils/id';
 import { getTodayString } from '../utils/date';
 import { getAIAdapter } from '../adapters';
+import logger from '../utils/logger';
 import useDreamStore from '../../store/useDreamStore';
 import useSymbolStore from '../../store/useSymbolStore';
 
@@ -59,7 +60,7 @@ export async function saveDream(content, options = {}) {
 
     return analyzedDream;
   } catch (error) {
-    console.error('[DreamService] Analysis failed:', error);
+    logger.error('[DreamService] Analysis failed:', error);
 
     // 분석 실패해도 꿈은 저장
     store.updateDream(id, {

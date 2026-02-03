@@ -3,6 +3,7 @@ import { StatusBar, Style } from '@capacitor/status-bar';
 import { Keyboard } from '@capacitor/keyboard';
 import { SplashScreen } from '@capacitor/splash-screen';
 import { App } from '@capacitor/app';
+import logger from './utils/logger';
 
 // Platform detection
 export const isNative = Capacitor.isNativePlatform();
@@ -44,6 +45,6 @@ export async function initCapacitor() {
     });
 
   } catch (error) {
-    console.error('Capacitor init error:', error);
+    logger.error('Capacitor init error:', error);
   }
 }

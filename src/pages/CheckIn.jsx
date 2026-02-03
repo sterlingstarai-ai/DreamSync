@@ -21,8 +21,16 @@ const STEPS = ['condition', 'emotion', 'stress', 'events'];
 export default function CheckIn() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { checkedInToday, todayLog, submitCheckIn, isLoading } = useCheckIn();
+  const { checkedInToday, todayLog, submitCheckIn, isLoading, error: checkInError, clearError: clearCheckInError } = useCheckIn();
   const { recordActualFromCheckIn } = useForecast();
+
+  // 에러 발생 시 토스트 표시
+  useEffect(() => {
+    if (checkInError) {
+      toast.error(checkInError);
+      clearCheckInError();
+    }
+  }, [checkInError, toast, clearCheckInError]);
 
   const [step, setStep] = useState(0);
   const [condition, setCondition] = useState(3);
@@ -159,7 +167,14 @@ export default function CheckIn() {
 
         {/* Progress Bar */}
         <div className="mb-6">
-          <div className="h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden">
+          <div
+            className="h-1 bg-[var(--bg-tertiary)] rounded-full overflow-hidden"
+            role="progressbar"
+            aria-valuenow={Math.round(progress)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`체크인 진행률 ${Math.round(progress)}%`}
+          >
             <div
               className="h-full bg-gradient-to-r from-violet-600 to-blue-500 transition-all duration-300"
               style={{ width: `${progress}%` }}
@@ -256,11 +271,14 @@ function ConditionStep({ value, onChange }) {
         전반적인 몸과 마음 상태를 선택해주세요
       </p>
 
-      <div className="flex justify-center gap-4 mb-8">
+      <div className="flex justify-center gap-4 mb-8" role="radiogroup" aria-label="컨디션 선택">
         {conditions.map((c) => (
           <button
             key={c.value}
             onClick={() => onChange(c.value)}
+            role="radio"
+            aria-checked={value === c.value}
+            aria-label={`컨디션 ${c.label}`}
             className={`
               flex flex-col items-center gap-2 p-4 rounded-2xl transition-all
               ${value === c.value
@@ -269,7 +287,7 @@ function ConditionStep({ value, onChange }) {
               }
             `}
           >
-            <span className="text-4xl">{c.emoji}</span>
+            <span className="text-4xl" aria-hidden="true">{c.emoji}</span>
             <span className={`text-xs ${value === c.value ? 'text-violet-400' : 'text-[var(--text-muted)]'}`}>
               {c.label}
             </span>
@@ -301,13 +319,15 @@ function EmotionStep({ selected, onChange }) {
         최대 5개까지 선택할 수 있어요
       </p>
 
-      <div className="flex flex-wrap justify-center gap-2">
+      <div className="flex flex-wrap justify-center gap-2" role="group" aria-label="감정 선택 (최대 5개)">
         {EMOTIONS.map((emotion) => {
           const isSelected = selected.includes(emotion.id);
           return (
             <button
               key={emotion.id}
               onClick={() => toggleEmotion(emotion.id)}
+              aria-pressed={isSelected}
+              aria-label={`감정 ${emotion.name}`}
               className={`
                 px-4 py-2 rounded-full text-sm transition-all
                 ${isSelected
@@ -321,7 +341,7 @@ function EmotionStep({ selected, onChange }) {
                 borderColor: emotion.color,
               } : {}}
             >
-              {emotion.emoji} {emotion.name}
+              <span aria-hidden="true">{emotion.emoji}</span> {emotion.name}
             </button>
           );
         })}
@@ -357,11 +377,14 @@ function StressStep({ value, onChange }) {
         스트레스 정도를 선택해주세요
       </p>
 
-      <div className="flex justify-center gap-2 mb-6">
+      <div className="flex justify-center gap-2 mb-6" role="radiogroup" aria-label="스트레스 레벨 선택">
         {levels.map((level) => (
           <button
             key={level.value}
             onClick={() => onChange(level.value)}
+            role="radio"
+            aria-checked={value === level.value}
+            aria-label={`스트레스 ${level.label} (${level.value}/5)`}
             className={`
               w-12 h-12 rounded-xl transition-all flex items-center justify-center
               ${value === level.value ? 'scale-110 shadow-lg' : 'opacity-50'}
@@ -417,13 +440,15 @@ function EventsStep({ selected, onChange }) {
             >
               {EVENT_CATEGORIES[category].name}
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2" role="group" aria-label={`${EVENT_CATEGORIES[category].name} 이벤트`}>
               {events.map((event) => {
                 const isSelected = selected.includes(event.id);
                 return (
                   <button
                     key={event.id}
                     onClick={() => toggleEvent(event.id)}
+                    aria-pressed={isSelected}
+                    aria-label={`이벤트 ${event.name}`}
                     className={`
                       px-3 py-1.5 rounded-full text-sm transition-all
                       ${isSelected
@@ -432,7 +457,7 @@ function EventsStep({ selected, onChange }) {
                       }
                     `}
                   >
-                    {event.emoji} {event.name}
+                    <span aria-hidden="true">{event.emoji}</span> {event.name}
                   </button>
                 );
               })}

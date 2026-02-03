@@ -5,7 +5,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Moon, Sun, Sparkles, TrendingUp, Calendar,
-  ChevronRight, Plus, CheckCircle2
+  ChevronRight, Plus, CheckCircle2, AlertTriangle
 } from 'lucide-react';
 import {
   PageContainer, Card, Button, Skeleton
@@ -24,10 +24,12 @@ import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast
 export default function Dashboard() {
   const navigate = useNavigate();
   const { user } = useAuthStore();
-  const { todayDreams, recentDreams } = useDreams();
-  const { checkedInToday, stats: checkInStats } = useCheckIn();
-  const { todayForecast, createTodayForecast, isGenerating } = useForecast();
+  const { todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
+  const { checkedInToday, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
+  const { todayForecast, createTodayForecast, isGenerating, error: forecastError, clearError: clearForecastError } = useForecast();
   const { isUHSEnabled } = useFeatureFlags();
+
+  const activeError = dreamError || checkInError || forecastError;
 
   const greeting = getGreeting();
   const userName = user?.name || '사용자';
@@ -49,6 +51,22 @@ export default function Dashboard() {
             {userName}님
           </h1>
         </header>
+
+        {/* Error Banner */}
+        {activeError && (
+          <div className="mb-4 p-3 rounded-xl bg-red-500/10 border border-red-500/20 flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="text-sm text-red-400">{activeError}</p>
+            </div>
+            <button
+              onClick={() => { clearDreamError(); clearCheckInError(); clearForecastError(); }}
+              className="text-xs text-red-400/70 hover:text-red-400"
+            >
+              닫기
+            </button>
+          </div>
+        )}
 
         {/* Today's Forecast Card */}
         <section className="mb-6">
@@ -84,10 +102,11 @@ export default function Dashboard() {
             </h2>
             <button
               onClick={() => navigate('/report')}
+              aria-label="주간 리포트 자세히 보기"
               className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
             >
               자세히 보기
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
 
@@ -129,10 +148,11 @@ export default function Dashboard() {
               </h2>
               <button
                 onClick={() => navigate('/symbols')}
+                aria-label="심볼 사전 보기"
                 className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
               >
                 심볼 사전
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="w-4 h-4" aria-hidden="true" />
               </button>
             </div>
 

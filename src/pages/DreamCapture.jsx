@@ -23,8 +23,17 @@ export default function DreamCapture() {
 
   const {
     dreams, todayDreams, isLoading, isAnalyzing,
+    error: dreamError, clearError: clearDreamError,
     createDream, getDreamById
   } = useDreams();
+
+  // 에러 발생 시 토스트 표시
+  useEffect(() => {
+    if (dreamError) {
+      toast.error(dreamError);
+      clearDreamError();
+    }
+  }, [dreamError, toast, clearDreamError]);
 
   const [content, setContent] = useState('');
   const [selectedDreamId, setSelectedDreamId] = useState(null);
@@ -220,9 +229,10 @@ function DreamAnalysisView({ dream, isAnalyzing, onClose }) {
         </div>
         <button
           onClick={onClose}
+          aria-label="분석 결과 닫기"
           className="p-1 rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-tertiary)]"
         >
-          <X className="w-5 h-5" />
+          <X className="w-5 h-5" aria-hidden="true" />
         </button>
       </div>
 

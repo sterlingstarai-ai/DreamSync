@@ -9,6 +9,7 @@
  * - 요청 쿼터 관리
  * - 요청/응답 로깅
  */
+import logger from '../utils/logger';
 
 /**
  * B2B API 클라이언트 스텁
@@ -29,7 +30,7 @@ class B2BClient {
    */
   async validateApiKey() {
     // Phase 4: 실제 서버 검증
-    console.log('[B2B] API 키 검증 (스텁)');
+    logger.log('[B2B] API 키 검증 (스텁)');
 
     if (!this.apiKey) {
       return { valid: false, error: 'API 키가 필요합니다.' };
@@ -49,7 +50,7 @@ class B2BClient {
    * 쿼터 확인 (스텁)
    */
   async checkQuota() {
-    console.log('[B2B] 쿼터 확인 (스텁)');
+    logger.log('[B2B] 쿼터 확인 (스텁)');
 
     // Phase 4: 실제 서버에서 조회
     return {
@@ -65,7 +66,7 @@ class B2BClient {
    * @param {number} amount
    */
   async deductQuota(amount = 1) {
-    console.log(`[B2B] 쿼터 차감: ${amount} (스텁)`);
+    logger.log(`[B2B] 쿼터 차감: ${amount} (스텁)`);
 
     this.quota.used += amount;
 
@@ -80,7 +81,7 @@ class B2BClient {
    * @param {Object} logData
    */
   async logRequest(logData) {
-    console.log('[B2B] 요청 로그:', logData);
+    logger.log('[B2B] 요청 로그:', logData);
 
     // Phase 4: 실제 로깅 서버로 전송
     return { logged: true };
@@ -94,7 +95,7 @@ class B2BClient {
    * @param {string[]} params.metrics
    */
   async getAggregatedData({ startDate, endDate, metrics }) {
-    console.log('[B2B] 집계 데이터 조회 (스텁):', { startDate, endDate, metrics });
+    logger.log('[B2B] 집계 데이터 조회 (스텁):', { startDate, endDate, metrics });
 
     // 쿼터 차감
     await this.deductQuota(1);
@@ -127,7 +128,7 @@ class B2BClient {
    * 익명화된 인사이트 조회 API (스텁)
    */
   async getAnonymizedInsights() {
-    console.log('[B2B] 익명화 인사이트 조회 (스텁)');
+    logger.log('[B2B] 익명화 인사이트 조회 (스텁)');
 
     await this.deductQuota(1);
 

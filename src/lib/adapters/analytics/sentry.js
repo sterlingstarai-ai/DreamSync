@@ -10,6 +10,8 @@
  * - 에러 컨텍스트만 허용 ✅
  */
 
+import logger from '../../utils/logger';
+
 let Sentry = null;
 let isInitialized = false;
 
@@ -21,7 +23,7 @@ async function initialize() {
 
   const dsn = import.meta.env.VITE_SENTRY_DSN;
   if (!dsn) {
-    console.warn('[Sentry] DSN not configured');
+    logger.warn('[Sentry] DSN not configured');
     return;
   }
 
@@ -42,9 +44,9 @@ async function initialize() {
       },
     });
     isInitialized = true;
-    console.log('[Sentry] Initialized');
+    logger.log('[Sentry] Initialized');
   } catch (error) {
-    console.error('[Sentry] Init failed:', error);
+    logger.error('[Sentry] Init failed:', error);
   }
 }
 
@@ -117,7 +119,7 @@ function setUser(user) {
  */
 function captureException(error, context = {}) {
   if (!isInitialized || !Sentry) {
-    console.error('[Sentry Mock] Exception:', error);
+    logger.error('[Sentry Mock] Exception:', error);
     return;
   }
 
@@ -141,7 +143,7 @@ function captureException(error, context = {}) {
  */
 function captureMessage(message, level = 'info') {
   if (!isInitialized || !Sentry) {
-    console.log(`[Sentry Mock] ${level}: ${message}`);
+    logger.log(`[Sentry Mock] ${level}: ${message}`);
     return;
   }
 

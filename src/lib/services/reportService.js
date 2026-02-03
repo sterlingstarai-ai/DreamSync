@@ -6,6 +6,7 @@
 
 import { getDaysAgo, getWeekRange } from '../utils/date';
 import { getAIAdapter } from '../adapters';
+import logger from '../utils/logger';
 import useDreamStore from '../../store/useDreamStore';
 import useCheckInStore from '../../store/useCheckInStore';
 import useForecastStore from '../../store/useForecastStore';
@@ -29,7 +30,7 @@ export async function generateWeeklyReport() {
     const aiAdapter = getAIAdapter();
     aiInsights = await aiAdapter.generatePatternInsights(data);
   } catch (error) {
-    console.log('[ReportService] AI insights skipped:', error.message);
+    logger.log('[ReportService] AI insights skipped:', error.message);
   }
 
   return {

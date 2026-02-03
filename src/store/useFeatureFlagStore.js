@@ -6,6 +6,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_FEATURE_FLAGS, FEATURE_FLAG_INFO, isFlagAvailable } from '../constants/featureFlags';
 import { Capacitor } from '@capacitor/core';
 import { zustandStorage } from '../lib/adapters/storage';
+import logger from '../lib/utils/logger';
 
 /**
  * 현재 플랫폼 가져오기
@@ -51,7 +52,7 @@ const useFeatureFlagStore = create(
 
         // 플랫폼 제한 확인
         if (!isFlagAvailable(key, platform)) {
-          console.warn(`Flag "${key}" is not available on ${platform}`);
+          logger.warn(`Flag "${key}" is not available on ${platform}`);
           return;
         }
 

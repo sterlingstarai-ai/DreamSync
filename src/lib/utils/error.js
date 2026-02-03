@@ -1,6 +1,7 @@
 /**
  * 에러 처리 유틸리티
  */
+import logger from './logger';
 
 /**
  * 앱 에러 클래스
@@ -133,7 +134,7 @@ export function logError(error, context = {}) {
   const normalizedError = normalizeError(error);
 
   // 콘솔 로깅 (개발용)
-  console.error('[AppError]', {
+  logger.error('[AppError]', {
     message: normalizedError.message,
     code: normalizedError.code,
     timestamp: normalizedError.timestamp,

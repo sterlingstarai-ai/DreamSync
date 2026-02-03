@@ -2,6 +2,7 @@
  * HealthKit/Health Connect 훅
  */
 import { useState, useEffect, useCallback } from 'react';
+import logger from '../lib/utils/logger';
 import {
   getHealthPlatform,
   requestHealthPermissions,
@@ -51,7 +52,7 @@ export function useHealthKit() {
           setTodaySleep(sleep);
         }
       } catch (e) {
-        console.error('[useHealthKit] Init error:', e);
+        logger.error('[useHealthKit] Init error:', e);
         setError(e.message);
       } finally {
         setIsLoading(false);

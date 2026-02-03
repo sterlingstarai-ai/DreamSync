@@ -8,6 +8,7 @@
  * - SupabaseAdapter: 서버 연동 시 (Phase 2+)
  */
 import { Preferences } from '@capacitor/preferences';
+import logger from '../utils/logger';
 import { Capacitor } from '@capacitor/core';
 
 /**
@@ -65,7 +66,7 @@ const LocalStorageAdapter = {
     try {
       localStorage.setItem(`dreamsync_${key}`, JSON.stringify(value));
     } catch (e) {
-      console.error('LocalStorage set error:', e);
+      logger.error('LocalStorage set error:', e);
     }
   },
 

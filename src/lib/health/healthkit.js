@@ -6,6 +6,7 @@
  */
 
 import { Capacitor } from '@capacitor/core';
+import logger from '../utils/logger';
 
 /**
  * 플랫폼 확인
@@ -24,7 +25,7 @@ export async function requestHealthPermissions() {
   const platform = getHealthPlatform();
 
   if (platform === 'web') {
-    console.log('[Health] Web에서는 건강 데이터를 사용할 수 없습니다.');
+    logger.log('[Health] Web에서는 건강 데이터를 사용할 수 없습니다.');
     return { granted: false, reason: 'web-not-supported' };
   }
 
@@ -32,7 +33,7 @@ export async function requestHealthPermissions() {
   // iOS: @niclandry/capacitor-healthkit-plugin
   // Android: @niclandry/capacitor-health-connect-plugin
 
-  console.log(`[Health] ${platform} 권한 요청 (Mock)`);
+  logger.log(`[Health] ${platform} 권한 요청 (Mock)`);
 
   // Mock: 권한 승인됨으로 가정
   return { granted: true, platform };
@@ -53,7 +54,7 @@ export async function getSleepData(startDate, endDate) {
   }
 
   // Phase 2: 실제 데이터 조회 구현
-  console.log(`[Health] 수면 데이터 조회 (Mock): ${startDate} ~ ${endDate}`);
+  logger.log(`[Health] 수면 데이터 조회 (Mock): ${startDate} ~ ${endDate}`);
 
   // Mock 데이터 생성
   const mockData = [];
@@ -127,7 +128,7 @@ export async function syncHealthData() {
     return { success: false, reason: 'web-not-supported' };
   }
 
-  console.log(`[Health] 데이터 동기화 (Mock)`);
+  logger.log(`[Health] 데이터 동기화 (Mock)`);
 
   // Mock: 지난 7일 데이터 동기화
   const endDate = new Date();

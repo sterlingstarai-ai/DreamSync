@@ -8,6 +8,7 @@
  * ⚠️ 저장소 원칙: 소스 오브 트루스는 하나만 존재한다.
  *    Phase 1에서는 Zustand persist가 유일한 저장소.
  */
+import logger from '../utils/logger';
 
 /**
  * Local Adapter (Phase 1)
@@ -49,7 +50,7 @@ let currentAdapter = LocalAPIAdapter;
 export function setAPIAdapter(type) {
   const adapter = adapters[type];
   if (!adapter) {
-    console.warn(`Unknown API adapter: ${type}, falling back to local`);
+    logger.warn(`Unknown API adapter: ${type}, falling back to local`);
     currentAdapter = LocalAPIAdapter;
   } else {
     currentAdapter = adapter;

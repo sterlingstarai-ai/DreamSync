@@ -7,6 +7,7 @@
 import { getAIAdapter } from '../adapters/ai';
 import { DreamAnalysisSchema, ForecastPredictionSchema, safeParse } from './schemas';
 import { AppError, ERROR_CODES, withRetry } from '../utils/error';
+import logger from '../utils/logger';
 
 /**
  * AI 서비스 설정
@@ -41,7 +42,7 @@ export async function analyzeDream(content) {
     // Zod 스키마 검증
     const validation = safeParse(DreamAnalysisSchema, result);
     if (!validation.success) {
-      console.error('AI 응답 검증 실패:', validation.error);
+      logger.error('AI 응답 검증 실패:', validation.error);
       throw new AppError('AI 응답 형식이 올바르지 않습니다.', ERROR_CODES.AI_PARSE_ERROR);
     }
 
@@ -66,7 +67,7 @@ export async function generateForecast({ recentDreams = [], recentLogs = [] }) {
     // Zod 스키마 검증
     const validation = safeParse(ForecastPredictionSchema, result);
     if (!validation.success) {
-      console.error('예보 응답 검증 실패:', validation.error);
+      logger.error('예보 응답 검증 실패:', validation.error);
       throw new AppError('예보 응답 형식이 올바르지 않습니다.', ERROR_CODES.AI_PARSE_ERROR);
     }
 

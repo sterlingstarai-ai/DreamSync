@@ -6,6 +6,7 @@
  */
 
 import { createClient } from '@supabase/supabase-js';
+import logger from '../../utils/logger';
 
 let supabase = null;
 
@@ -222,7 +223,7 @@ async function syncPendingChanges(changes) {
         await client.from(table).delete().eq('id', data.id);
       }
     } catch (error) {
-      console.error(`[Supabase] Sync failed for ${change.table}:`, error);
+      logger.error(`[Supabase] Sync failed for ${change.table}:`, error);
       throw error;
     }
   }

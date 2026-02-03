@@ -3,6 +3,7 @@
  * Web Speech API 사용 (브라우저/웹뷰)
  */
 import { useState, useCallback, useRef, useEffect } from 'react';
+import logger from '../lib/utils/logger';
 
 /**
  * 음성 인식 지원 여부
@@ -127,7 +128,7 @@ export default function useVoiceInput({
         recognitionRef.current.start();
       } catch {
         // 이미 시작된 경우 무시
-        console.warn('Recognition already started');
+        logger.warn('Recognition already started');
       }
     }
   }, [isListening]);

@@ -10,6 +10,8 @@
  * - 길이/해시만 허용 ✅
  */
 
+import logger from '../../utils/logger';
+
 let mixpanel = null;
 let isInitialized = false;
 
@@ -21,7 +23,7 @@ async function initialize() {
 
   const token = import.meta.env.VITE_MIXPANEL_TOKEN;
   if (!token) {
-    console.warn('[Mixpanel] Token not configured');
+    logger.warn('[Mixpanel] Token not configured');
     return;
   }
 
@@ -35,9 +37,9 @@ async function initialize() {
       persistence: 'localStorage',
     });
     isInitialized = true;
-    console.log('[Mixpanel] Initialized');
+    logger.log('[Mixpanel] Initialized');
   } catch (error) {
-    console.error('[Mixpanel] Init failed:', error);
+    logger.error('[Mixpanel] Init failed:', error);
   }
 }
 
@@ -64,7 +66,7 @@ function identify(userId, traits = {}) {
  */
 function track(eventName, properties = {}) {
   if (!isInitialized || !mixpanel) {
-    console.log(`[Mixpanel Mock] ${eventName}`, properties);
+    logger.log(`[Mixpanel Mock] ${eventName}`, properties);
     return;
   }
 
@@ -127,7 +129,7 @@ function setUserProperty(key, value) {
   // 민감 데이터 체크
   const sensitiveKeys = ['dreamCount', 'emotionHistory', 'healthScore'];
   if (sensitiveKeys.includes(key)) {
-    console.warn(`[Mixpanel] Blocked sensitive property: ${key}`);
+    logger.warn(`[Mixpanel] Blocked sensitive property: ${key}`);
     return;
   }
 

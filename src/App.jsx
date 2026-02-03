@@ -9,6 +9,7 @@ import { PageLoading } from './components/common/Loading';
 import Router from './Router';
 import { initializeAdapters } from './lib/adapters';
 import { initSyncQueue } from './lib/offline/syncQueue';
+import logger from './lib/utils/logger';
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -31,7 +32,7 @@ function App() {
         await initSyncQueue();
 
       } catch (error) {
-        console.error('App init error:', error);
+        logger.error('App init error:', error);
       } finally {
         setIsInitialized(true);
       }
