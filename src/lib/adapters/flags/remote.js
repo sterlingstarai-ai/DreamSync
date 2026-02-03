@@ -3,12 +3,15 @@
  *
  * 서버에서 Feature Flags 가져오기
  * Supabase 또는 별도 플래그 서비스 연동
+ *
+ * localStorage 대신 Capacitor Preferences 기반 storage adapter 사용
  */
 
 import { DEFAULT_FLAGS } from '../../../constants/featureFlags';
 import logger from '../../utils/logger';
+import storage from '../storage';
 
-const CACHE_KEY = 'dreamsync_remote_flags';
+const CACHE_KEY = 'remote_flags';
 const CACHE_TTL = 5 * 60 * 1000; // 5분
 
 let cachedFlags = null;
@@ -27,12 +30,14 @@ async function fetchRemoteFlags(userId) {
   }
 
   try {
+    // TODO: Phase 2 — RLS 적용 후 user_id 쿼리 제거, JWT에서 자동 필터링
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/feature_flags?user_id=eq.${userId}&select=*`,
+      `${supabaseUrl}/rest/v1/feature_flags?select=*`,
       {
         headers: {
           'apikey': supabaseKey,
           'Authorization': `Bearer ${supabaseKey}`,
+          'x-user-id': userId,
         },
       }
     );
@@ -63,16 +68,16 @@ async function fetchRemoteFlags(userId) {
 async function getFlags(userId) {
   const now = Date.now();
 
-  // 캐시 유효성 확인
+  // 메모리 캐시 유효성 확인
   if (cachedFlags && (now - cacheTimestamp) < CACHE_TTL) {
     return cachedFlags;
   }
 
-  // 로컬 캐시 확인
+  // Preferences 캐시 확인
   try {
-    const localCache = localStorage.getItem(CACHE_KEY);
+    const localCache = await storage.get(CACHE_KEY);
     if (localCache) {
-      const { flags, timestamp } = JSON.parse(localCache);
+      const { flags, timestamp } = localCache;
       if ((now - timestamp) < CACHE_TTL) {
         cachedFlags = flags;
         cacheTimestamp = timestamp;
@@ -80,7 +85,7 @@ async function getFlags(userId) {
       }
     }
   } catch {
-    // 로컬 캐시 무시
+    // 캐시 읽기 실패 무시
   }
 
   // 원격에서 가져오기
@@ -91,10 +96,7 @@ async function getFlags(userId) {
   cacheTimestamp = now;
 
   try {
-    localStorage.setItem(CACHE_KEY, JSON.stringify({
-      flags,
-      timestamp: now,
-    }));
+    await storage.set(CACHE_KEY, { flags, timestamp: now });
   } catch {
     // 캐시 저장 실패 무시
   }
@@ -137,6 +139,7 @@ async function updateFlag(userId, flagName, value) {
           'Authorization': `Bearer ${supabaseKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'resolution=merge-duplicates',
+          'x-user-id': userId,
         },
         body: JSON.stringify({
           user_id: userId,
@@ -153,7 +156,7 @@ async function updateFlag(userId, flagName, value) {
     // 캐시 무효화
     cachedFlags = null;
     cacheTimestamp = 0;
-    localStorage.removeItem(CACHE_KEY);
+    await storage.remove(CACHE_KEY);
 
     return true;
   } catch (error) {
@@ -165,10 +168,18 @@ async function updateFlag(userId, flagName, value) {
 /**
  * 캐시 클리어
  */
-function clearCache() {
+async function clearCache() {
   cachedFlags = null;
   cacheTimestamp = 0;
-  localStorage.removeItem(CACHE_KEY);
+  await storage.remove(CACHE_KEY);
+}
+
+/**
+ * 내부 상태 리셋 (테스트용)
+ */
+function _resetForTest() {
+  cachedFlags = null;
+  cacheTimestamp = 0;
 }
 
 export const RemoteFlagsAdapter = {
@@ -177,6 +188,7 @@ export const RemoteFlagsAdapter = {
   isEnabled,
   updateFlag,
   clearCache,
+  _resetForTest,
 };
 
 export default RemoteFlagsAdapter;
