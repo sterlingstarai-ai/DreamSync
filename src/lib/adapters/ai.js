@@ -11,6 +11,7 @@
  */
 
 import { generateMockDreamAnalysis, generateMockForecast, generateMockPatternInsights } from '../ai/mock';
+import { EdgeAIAdapter } from './ai/edge';
 import logger from '../utils/logger';
 
 /**
@@ -41,35 +42,7 @@ const MockAIAdapter = {
   },
 };
 
-/**
- * Edge Function AI Adapter (Phase 2+)
- * Supabase Edge Function을 통해 AI 호출 (서버 사이드에서 API Key 관리)
- *
- * ⚠️ 클라이언트에서 LLM API를 직접 호출하지 않음
- */
-const EdgeAIAdapter = {
-  name: 'edge',
-
-  async analyzeDream(/* content */) {
-    // TODO: Phase 2 - Edge Function 엔드포인트 연동
-    // const response = await fetch('/api/v1/analyze-dream', {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userToken}` },
-    //   body: JSON.stringify({ content: _content }),
-    // });
-    // if (!response.ok) throw new Error(`Edge API error: ${response.status}`);
-    // return response.json();
-    throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
-  },
-
-  async generateForecast(/* params */) {
-    throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
-  },
-
-  async generatePatternInsights(/* params */) {
-    throw new Error('Edge AI Adapter not implemented yet. Enable mock mode for Phase 1.');
-  },
-};
+// EdgeAIAdapter는 ./ai/edge.js에서 import
 
 /**
  * AI Adapter 레지스트리

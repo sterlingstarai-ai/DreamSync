@@ -9,6 +9,7 @@ export const DEFAULT_FLAGS = {
   saju: false,
   uhs: false,
   b2b: false,
+  edgeAI: false,
   devMode: false,
   mockAI: true,
 };
@@ -25,6 +26,9 @@ export const DEFAULT_FEATURE_FLAGS = {
 
   // Phase 4: B2B API 접근
   b2b: false,
+
+  // Phase 2: Edge Function AI
+  edgeAI: false,
 
   // 개발/디버그용
   devMode: false,
@@ -54,6 +58,12 @@ export const FEATURE_FLAG_INFO = {
     name: 'B2B API',
     description: '기업용 API 접근을 활성화합니다.',
     phase: 4,
+    requiresPlatform: null,
+  },
+  edgeAI: {
+    name: 'Edge AI',
+    description: 'Edge Function을 통한 AI 분석을 사용합니다.',
+    phase: 2,
     requiresPlatform: null,
   },
   devMode: {
