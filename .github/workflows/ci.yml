@@ -30,3 +30,6 @@ jobs:
 
       - name: Test
         run: npm test
+
+      - name: Flaky guard (3x repeat)
+        run: npm run test:repeat
