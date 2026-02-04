@@ -31,6 +31,11 @@ export async function initSyncQueue() {
   const status = await Network.getStatus();
   state.isOnline = status.connected;
 
+  // 온라인 상태에서 대기 큐가 있으면 즉시 플러시
+  if (state.isOnline && state.items.length > 0) {
+    await flush();
+  }
+
   Network.addListener('networkStatusChange', async (newStatus) => {
     const wasOffline = !state.isOnline;
     state.isOnline = newStatus.connected;
