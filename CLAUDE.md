@@ -8,7 +8,7 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: Phase 1-4 + Phase 2 웨어러블 + Edge Function + Release Hardening 완료 (234 tests, 23 files, 0 lint errors)
+- **상태**: Phase 1-4 + Phase 2 웨어러블 + Edge Function + Release Hardening 완료 (240 tests, 23 files, 0 lint errors)
 - **배포**: https://dreamsync-app.vercel.app
 - **GitHub**: https://github.com/sterlingstarai-ai/DreamSync
 
@@ -343,9 +343,9 @@ npm run cap:android  # 빌드 + Android Studio 열기
 - audit-log에 dream content 원문 저장 0
 - rate limit은 서버사이드 전용
 
-### 2026-02-04: Release Hardening
+### 2026-02-04: Release Hardening (Phase 0-4 완료)
 
-#### 프로퍼티/뮤테이션 테스트 (30 신규, 총 234개)
+#### 프로퍼티/뮤테이션 테스트 (36 tests in hardening.property.test.js)
 - `src/lib/__tests__/hardening.property.test.js` — fast-check 기반
   - Confidence 스코어링 불변 (6 property tests, 200+ random inputs)
   - Mutation-hardening 경계값 (3 tests)
@@ -354,22 +354,60 @@ npm run cap:android  # 빌드 + Android Studio 열기
   - Zod 스키마 crash-free (4 property tests, 200+ random inputs)
   - useSleepStore 소스 우선순위 (3 property tests)
   - Storage 마이그레이션 안전성 (2 tests)
+  - Flag-off smoke test (3 tests) — DEFAULT_FLAGS/DEFAULT_FEATURE_FLAGS 이중 검증
+  - PII leak regression (3 tests) — maskDreamContent 100 runs, maskSensitiveFields 13키 strip
 
 #### 뮤테이션 커버리지
 - 6개 핵심 모듈 전수 커버: confidence, estimateSleepQuality, featureFlags, Zod 파싱, useSleepStore, migration
-- 모든 mutant 탐지 (MUTATION_REPORT.md)
+- 17 mutants, 0 survivors, 100% kill rate (MUTATION_BASELINE.md)
+
+#### 퍼징 베이스라인
+- ~1,400+ random inputs across all properties
+- 0 crashes (NaN date 이슈 1건 발견 및 수정)
+- 0 범위 위반, 0 flag-off 위반 (FUZZ_BASELINE.md)
+
+#### 버그 수정 (HARDENING_PROGRESS.md)
+1. `fc.date()` NaN → `toISOString()` RangeError — `isNaN(date.getTime())` guard
+2. `initSyncQueue` 복원 후 flush 누락 — 온라인 시 즉시 `flush()` 호출
 
 #### CI 강화
 - `npm run test:repeat` — 3회 연속 vitest (--retry 0)
 - `.github/workflows/ci.yml` — Flaky guard 스텝 추가
-- 3x repeat: 234 tests × 3 = 0 failures
+- 3x repeat: 240 tests × 3 = 0 failures
 
-#### 품질 게이트 문서
-- HARDENING_GATE.md — 5개 게이트 카테고리 정의
-- MUTATION_REPORT.md — 뮤테이션 테스트 결과
-- FUZZ_REPORT.md — fast-check 프로퍼티 테스트 결과
-- E2E_REPORT.md — E2E 테스트 설계 및 현황
+#### 릴리스 게이트 자동화
+- `scripts/release-gate.sh` — 5개 게이트 자동 실행 (verify + secret scan + PII scan + flag check + N-repeat)
+- `--repeat N` 인자 지원 (기본 20)
+
+#### 디바이스 테스트 매트릭스
+- TESTPLAN_DEVICE_MATRIX.md — iOS 2버전, Android 3버전, Web 5브라우저 조합
+- 26개 시나리오 (핵심 플로우, 권한, 네트워크, 생명주기, 접근성)
+- TESTRUN_LOG_TEMPLATE.md — 재현 가능한 테스트 실행 기록 템플릿
+
+#### 최종 게이트 지표
+| 지표 | 값 |
+|------|-----|
+| Tests | 240 (23 files) |
+| Mutation survivors | 0/17 |
+| Fuzz crashes | 0 |
+| Flake rate (3x) | 0% |
+| Flag-off violations | 0 |
+| PII leak patterns | 0 |
+| Bundle secrets | 0 |
+| Lint errors | 0 |
+
+#### 품질 게이트 문서 (11개)
+- HARDENING_STATUS.md — 1-page 현황 요약
+- HARDENING_GATE.md — 릴리스 게이트 체크리스트
+- HARDENING_PROGRESS.md — 결함 수정 이력
+- HARDENING_EFFORT_MODEL.md — 작업량 산정 모델
+- MUTATION_BASELINE.md — 뮤테이션 테스트 베이스라인
+- FUZZ_BASELINE.md — 퍼징 테스트 베이스라인
+- E2E_BASELINE.md — E2E 테스트 베이스라인
 - MONKEY_PLAN.md — 몽키 테스트 계획
+- TESTPLAN_DEVICE_MATRIX.md — 디바이스 테스트 매트릭스
+- TESTRUN_LOG_TEMPLATE.md — 테스트 실행 로그 템플릿
+- scripts/release-gate.sh — 릴리스 게이트 자동화 스크립트
 
 ---
 
