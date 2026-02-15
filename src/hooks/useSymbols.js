@@ -2,6 +2,7 @@
  * 심볼 사전 관련 훅
  */
 import { useCallback, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useSymbolStore from '../store/useSymbolStore';
 import useAuthStore from '../store/useAuthStore';
 
@@ -10,7 +11,7 @@ import useAuthStore from '../store/useAuthStore';
  * @returns {Object}
  */
 export default function useSymbols() {
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const userId = user?.id;
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -19,15 +20,20 @@ export default function useSymbols() {
     symbols,
     isLoading,
     error,
-    updateSymbolMeaning,
-    deleteSymbol,
-    getSymbolById,
-    getUserSymbols,
-    getTopSymbols,
-    getRecentSymbols,
-    searchSymbols,
-    getTotalSymbolCount,
-  } = useSymbolStore();
+  } = useSymbolStore(useShallow(state => ({
+    symbols: state.symbols,
+    isLoading: state.isLoading,
+    error: state.error,
+  })));
+
+  const updateSymbolMeaning = useSymbolStore(state => state.updateSymbolMeaning);
+  const deleteSymbol = useSymbolStore(state => state.deleteSymbol);
+  const getSymbolById = useSymbolStore(state => state.getSymbolById);
+  const getUserSymbols = useSymbolStore(state => state.getUserSymbols);
+  const getTopSymbols = useSymbolStore(state => state.getTopSymbols);
+  const getRecentSymbols = useSymbolStore(state => state.getRecentSymbols);
+  const searchSymbols = useSymbolStore(state => state.searchSymbols);
+  const getTotalSymbolCount = useSymbolStore(state => state.getTotalSymbolCount);
 
   /**
    * 사용자의 모든 심볼

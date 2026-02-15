@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useDreamStore from './useDreamStore';
+import useSymbolStore from './useSymbolStore';
 
 // Mock analyzeDream
 vi.mock('../lib/ai/analyzeDream', () => ({
@@ -147,5 +148,99 @@ describe('useDreamStore', () => {
     const state = useDreamStore.getState();
     expect(state.dreams).toEqual([]);
     expect(state.isLoading).toBe(false);
+  });
+
+  describe('cascading symbol delete', () => {
+    beforeEach(() => {
+      useSymbolStore.getState().reset();
+    });
+
+    it('should remove dreamId from symbol on dream delete', async () => {
+      const dream = await useDreamStore.getState().addDream({
+        content: '바다에서 수영', userId: 'user-1', autoAnalyze: false,
+      });
+
+      // Manually set analysis with symbols
+      useDreamStore.setState((state) => ({
+        dreams: state.dreams.map(d =>
+          d.id === dream.id
+            ? { ...d, analysis: { symbols: [{ name: '바다', meaning: '무의식' }] } }
+            : d
+        ),
+      }));
+
+      // Add symbol to symbol store with this dream
+      useSymbolStore.getState().addOrUpdateSymbol({
+        userId: 'user-1', name: '바다', meaning: '무의식', dreamId: dream.id,
+      });
+
+      // Add a second dream referencing same symbol
+      const dream2 = await useDreamStore.getState().addDream({
+        content: '바다에서 서핑', userId: 'user-1', autoAnalyze: false,
+      });
+      useSymbolStore.getState().addOrUpdateSymbol({
+        userId: 'user-1', name: '바다', meaning: '무의식', dreamId: dream2.id,
+      });
+
+      expect(useSymbolStore.getState().symbols).toHaveLength(1);
+      expect(useSymbolStore.getState().symbols[0].dreamIds).toHaveLength(2);
+
+      // Delete first dream
+      useDreamStore.getState().deleteDream(dream.id);
+
+      // Symbol should still exist but with only dream2
+      const sym = useSymbolStore.getState().symbols[0];
+      expect(sym.dreamIds).toHaveLength(1);
+      expect(sym.dreamIds[0]).toBe(dream2.id);
+      expect(sym.count).toBe(1);
+    });
+
+    it('should delete orphan symbol when last dream is removed', async () => {
+      const dream = await useDreamStore.getState().addDream({
+        content: '물속에서 잠수', userId: 'user-1', autoAnalyze: false,
+      });
+
+      useDreamStore.setState((state) => ({
+        dreams: state.dreams.map(d =>
+          d.id === dream.id
+            ? { ...d, analysis: { symbols: [{ name: '물', meaning: '감정' }] } }
+            : d
+        ),
+      }));
+
+      useSymbolStore.getState().addOrUpdateSymbol({
+        userId: 'user-1', name: '물', meaning: '감정', dreamId: dream.id,
+      });
+
+      expect(useSymbolStore.getState().symbols).toHaveLength(1);
+
+      useDreamStore.getState().deleteDream(dream.id);
+
+      expect(useSymbolStore.getState().symbols).toHaveLength(0);
+    });
+  });
+
+  describe('data cap', () => {
+    it('should cap dreams at MAX_DREAMS (500)', async () => {
+      // Pre-fill with 500 dreams
+      const dreams = Array.from({ length: 500 }, (_, i) => ({
+        id: `dream-${i}`,
+        userId: 'user-1',
+        content: `꿈 ${i}`,
+        voiceUrl: null,
+        analysis: null,
+        createdAt: new Date(2025, 0, i + 1).toISOString(),
+        updatedAt: new Date(2025, 0, i + 1).toISOString(),
+      }));
+      useDreamStore.setState({ dreams });
+
+      // Add one more
+      await useDreamStore.getState().addDream({
+        content: '초과 꿈', userId: 'user-1', autoAnalyze: false,
+      });
+
+      expect(useDreamStore.getState().dreams).toHaveLength(500);
+      expect(useDreamStore.getState().dreams[0].content).toBe('초과 꿈');
+    });
   });
 });

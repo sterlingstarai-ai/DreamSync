@@ -8,6 +8,8 @@ import { generateId } from '../lib/utils/id';
 import { getTodayString, getRecentDays, toDateString } from '../lib/utils/date';
 import { zustandStorage } from '../lib/adapters/storage';
 
+const MAX_CHECKINS = 365;
+
 const useCheckInStore = create(
   persist(
     (set, get) => ({
@@ -68,7 +70,7 @@ const useCheckInStore = create(
         };
 
         set((state) => ({
-          logs: [log, ...state.logs],
+          logs: [log, ...state.logs].slice(0, MAX_CHECKINS),
           isLoading: false,
         }));
 

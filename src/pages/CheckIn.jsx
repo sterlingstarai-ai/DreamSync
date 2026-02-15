@@ -26,7 +26,8 @@ export default function CheckIn() {
   const { checkedInToday, todayLog, submitCheckIn, isLoading, error: checkInError, clearError: clearCheckInError } = useCheckIn();
   const { recordActualFromCheckIn } = useForecast();
   const { isEnabled } = useFeatureFlags();
-  const sleepStore = useSleepStore();
+  const getTodaySummary = useSleepStore(state => state.getTodaySummary);
+  const setSleepSummary = useSleepStore(state => state.setSleepSummary);
 
   const healthkitEnabled = isEnabled('healthkit');
 
@@ -61,7 +62,7 @@ export default function CheckIn() {
   // 웨어러블 수면 데이터 자동 채움
   useEffect(() => {
     if (!healthkitEnabled) return;
-    const todaySummary = sleepStore.getTodaySummary();
+    const todaySummary = getTodaySummary();
     if (todaySummary && todaySummary.totalSleepMinutes) {
       setSleepData(prev => ({
         ...prev,
@@ -115,7 +116,7 @@ export default function CheckIn() {
     // 수면 데이터 저장 (healthkit 플래그 on일 때)
     if (healthkitEnabled) {
       const today = getTodayString();
-      sleepStore.setSleepSummary({
+      setSleepSummary({
         date: today,
         totalSleepMinutes: sleepData.duration,
         sleepQualityScore: sleepData.quality * 2, // 1-5 → 2-10
@@ -483,7 +484,7 @@ function SleepStep({ data, onChange }) {
         const [bH, bM] = updated.bedTime.split(':').map(Number);
         const [wH, wM] = updated.wakeTime.split(':').map(Number);
         let mins = (wH * 60 + wM) - (bH * 60 + bM);
-        if (mins <= 0) mins += 24 * 60; // 자정 넘김
+        if (mins < 0) mins += 24 * 60; // 자정 넘김 (0은 동일 시간이므로 유지)
         updated.duration = mins;
       }
       return updated;

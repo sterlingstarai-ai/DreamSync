@@ -2,10 +2,12 @@
  * Modal 컴포넌트
  * 다이얼로그/모달 창
  */
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import Button from './Button';
+
+const FOCUSABLE_SELECTOR = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 export default function Modal({
   isOpen,
@@ -19,6 +21,8 @@ export default function Modal({
   showCloseButton = true,
   className = '',
 }) {
+  const dialogRef = useRef(null);
+
   const sizes = {
     sm: 'max-w-sm',
     md: 'max-w-md',
@@ -27,17 +31,49 @@ export default function Modal({
     full: 'max-w-[calc(100%-2rem)] h-[calc(100%-2rem)]',
   };
 
-  // ESC 키로 닫기
+  // ESC 키로 닫기 + 포커스 트랩
   const handleKeyDown = useCallback((e) => {
-    if (e.key === 'Escape' && isOpen) {
+    if (e.key === 'Escape') {
       onClose();
+      return;
     }
-  }, [isOpen, onClose]);
+
+    if (e.key === 'Tab' && dialogRef.current) {
+      const focusable = dialogRef.current.querySelectorAll(FOCUSABLE_SELECTOR);
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
+    }
+  }, [onClose]);
 
   useEffect(() => {
+    if (!isOpen) return;
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
+  }, [isOpen, handleKeyDown]);
+
+  // 모달 열릴 때 첫 포커스 가능 요소로 자동 포커스
+  useEffect(() => {
+    if (isOpen && dialogRef.current) {
+      const focusable = dialogRef.current.querySelectorAll(FOCUSABLE_SELECTOR);
+      if (focusable.length > 0) {
+        focusable[0].focus();
+      }
+    }
+  }, [isOpen]);
 
   // 스크롤 방지
   useEffect(() => {
@@ -65,6 +101,7 @@ export default function Modal({
       onClick={handleOverlayClick}
     >
       <div
+        ref={dialogRef}
         className={`
           relative w-full ${sizes[size]}
           bg-[var(--bg-secondary)] border border-[var(--border-color)]

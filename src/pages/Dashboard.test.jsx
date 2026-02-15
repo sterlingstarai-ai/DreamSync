@@ -7,11 +7,14 @@ import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
 
 // Mock hooks
-vi.mock('../store/useAuthStore', () => ({
-  default: () => ({
+vi.mock('../store/useAuthStore', () => {
+  const state = {
     user: { id: 'test-user', name: '테스트', onboardingCompleted: true },
-  }),
-}));
+  };
+  const store = (selector) => selector ? selector(state) : state;
+  store.getState = () => state;
+  return { default: store };
+});
 
 vi.mock('../hooks/useDreams', () => ({
   default: () => ({
@@ -87,8 +90,9 @@ describe('Dashboard', () => {
     expect(screen.getAllByText(/체크인/).length).toBeGreaterThan(0);
   });
 
-  it('should render forecast card placeholder when no forecast', () => {
+  it('should render forecast card placeholder when no forecast and no data', () => {
     renderDashboard();
-    expect(screen.getByText('오늘의 예보 준비 중')).toBeInTheDocument();
+    expect(screen.getByText('첫 예보를 기다리고 있어요')).toBeInTheDocument();
+    expect(screen.getByText('첫 꿈이나 체크인을 기록하면 예보가 시작됩니다')).toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@
  * 인증 관련 훅
  */
 import { useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useNavigate } from 'react-router-dom';
 import useAuthStore from '../store/useAuthStore';
 
@@ -15,13 +16,18 @@ export default function useAuth() {
     user,
     isAuthenticated,
     isLoading,
-    signUp,
-    signIn,
-    signOut,
-    updateUser,
-    updateSettings,
-    completeOnboarding,
-  } = useAuthStore();
+  } = useAuthStore(useShallow(state => ({
+    user: state.user,
+    isAuthenticated: state.isAuthenticated,
+    isLoading: state.isLoading,
+  })));
+
+  const signUp = useAuthStore(state => state.signUp);
+  const signIn = useAuthStore(state => state.signIn);
+  const signOut = useAuthStore(state => state.signOut);
+  const updateUser = useAuthStore(state => state.updateUser);
+  const updateSettings = useAuthStore(state => state.updateSettings);
+  const completeOnboarding = useAuthStore(state => state.completeOnboarding);
 
   /**
    * 회원가입

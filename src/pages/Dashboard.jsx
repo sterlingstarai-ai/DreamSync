@@ -13,17 +13,19 @@ import {
 import BottomNav from '../components/common/BottomNav';
 import { UHSCard as UHSCardComponent } from '../components/uhs';
 import { calculateUHS } from '../lib/scoring';
+import { useShallow } from 'zustand/react/shallow';
 import useAuthStore from '../store/useAuthStore';
 import useDreams from '../hooks/useDreams';
 import useCheckIn from '../hooks/useCheckIn';
 import useForecast from '../hooks/useForecast';
 import useFeatureFlags from '../hooks/useFeatureFlags';
+import useSleepStore from '../store/useSleepStore';
 import { formatFriendlyDate } from '../lib/utils/date';
 import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const { todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
   const { checkedInToday, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
   const { todayForecast, createTodayForecast, isGenerating, confidence: calculatedConfidence, error: forecastError, clearError: clearForecastError } = useForecast();
@@ -34,12 +36,13 @@ export default function Dashboard() {
   const greeting = getGreeting();
   const userName = user?.name || '사용자';
 
-  // 페이지 로드 시 오늘 예보 생성
+  // 페이지 로드 시 오늘 예보 생성 (최소 데이터 + 에러 가드)
+  const hasMinimumData = recentDreams.length > 0 || checkedInToday;
   useEffect(() => {
-    if (!todayForecast && !isGenerating) {
+    if (!todayForecast && !isGenerating && !forecastError && hasMinimumData) {
       createTodayForecast();
     }
-  }, [todayForecast, isGenerating, createTodayForecast]);
+  }, [todayForecast, isGenerating, forecastError, hasMinimumData, createTodayForecast]);
 
   return (
     <>
@@ -74,6 +77,7 @@ export default function Dashboard() {
             forecast={todayForecast}
             isLoading={isGenerating}
             confidence={calculatedConfidence}
+            hasMinimumData={hasMinimumData}
           />
         </section>
 
@@ -185,7 +189,7 @@ function getGreeting() {
 /**
  * 오늘의 예보 카드
  */
-function ForecastCard({ forecast, isLoading, confidence }) {
+function ForecastCard({ forecast, isLoading, confidence, hasMinimumData }) {
   if (isLoading) {
     return (
       <Card variant="gradient" padding="lg">
@@ -205,10 +209,12 @@ function ForecastCard({ forecast, isLoading, confidence }) {
           <Sparkles className="w-8 h-8 text-violet-400" />
           <div>
             <h3 className="font-semibold text-[var(--text-primary)]">
-              오늘의 예보 준비 중
+              {hasMinimumData ? '오늘의 예보 준비 중' : '첫 예보를 기다리고 있어요'}
             </h3>
             <p className="text-sm text-[var(--text-secondary)]">
-              데이터가 쌓이면 예측 정확도가 높아져요
+              {hasMinimumData
+                ? '데이터가 쌓이면 예측 정확도가 높아져요'
+                : '첫 꿈이나 체크인을 기록하면 예보가 시작됩니다'}
             </p>
           </div>
         </div>
@@ -368,18 +374,59 @@ function RecentDreamCard({ dream }) {
 }
 
 /**
- * UHS 카드 (Phase 4)
+ * UHS 카드 (Phase 4) - 실제 스토어 데이터 기반
  */
 function UHSCard() {
   const navigate = useNavigate();
+  const { recentDreams, symbols } = useDreams();
+  const { recentLogs } = useCheckIn();
+  const { stats: forecastStats } = useForecast();
+  const getTodaySummary = useSleepStore(state => state.getTodaySummary);
 
-  // Mock 데이터로 UHS 계산
+  const todaySleep = getTodaySummary();
+  const hasEnoughData = recentDreams.length > 0 || recentLogs.length > 0;
+
+  if (!hasEnoughData) {
+    return (
+      <Card padding="lg">
+        <div className="flex items-center gap-3">
+          <Sparkles className="w-8 h-8 text-violet-400" />
+          <div>
+            <h3 className="font-semibold text-[var(--text-primary)]">웰니스 지수</h3>
+            <p className="text-sm text-[var(--text-secondary)]">
+              데이터가 더 쌓이면 웰니스 지수를 보여드려요
+            </p>
+          </div>
+        </div>
+      </Card>
+    );
+  }
+
+  // 최근 체크인에서 컨디션/스트레스 추출
+  const conditions = recentLogs.map(log => log.condition);
+  const avgStress = recentLogs.length > 0
+    ? recentLogs.reduce((sum, log) => sum + log.stressLevel, 0) / recentLogs.length
+    : undefined;
+
+  // 꿈 강도 평균
+  const analyzedDreams = recentDreams.filter(d => d.analysis);
+  const avgIntensity = analyzedDreams.length > 0
+    ? analyzedDreams.reduce((sum, d) => sum + (d.analysis.intensity || 5), 0) / analyzedDreams.length
+    : undefined;
+
   const uhsData = calculateUHS({
-    sleep: { duration: 420, quality: 4 },
-    stress: { stressLevel: 2 },
-    dream: { avgIntensity: 5, dreamCount: 3 },
-    mood: { conditions: [3, 4, 4, 3, 4] },
-    prediction: { avgAccuracy: 70 },
+    sleep: {
+      duration: todaySleep?.totalSleepMinutes,
+      quality: todaySleep?.sleepQualityScore != null ? Math.round(todaySleep.sleepQualityScore / 2) : undefined,
+    },
+    stress: { avgStress },
+    dream: {
+      avgIntensity,
+      dreamCount: recentDreams.length,
+      symbolVariety: symbols.length,
+    },
+    mood: { conditions },
+    prediction: { avgAccuracy: forecastStats.averageAccuracy || undefined },
   });
 
   return (

@@ -2,6 +2,7 @@
  * 예보 관련 훅
  */
 import { useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useForecastStore from '../store/useForecastStore';
 import useDreamStore from '../store/useDreamStore';
 import useCheckInStore from '../store/useCheckInStore';
@@ -14,7 +15,7 @@ import { calculateConfidence } from '../lib/scoring/confidence';
  * @returns {Object}
  */
 export default function useForecast() {
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const userId = user?.id;
 
   const {
@@ -22,17 +23,24 @@ export default function useForecast() {
     isLoading,
     isGenerating,
     error,
-    generateForecast,
-    recordActual,
-    getTodayForecast,
-    getRecentForecasts,
-    getAverageAccuracy,
-    deleteForecast,
-    clearError,
-  } = useForecastStore();
+  } = useForecastStore(useShallow(state => ({
+    forecasts: state.forecasts,
+    isLoading: state.isLoading,
+    isGenerating: state.isGenerating,
+    error: state.error,
+  })));
 
-  const { getRecentDreams } = useDreamStore();
-  const { getRecentLogs, getTodayLog } = useCheckInStore();
+  const generateForecast = useForecastStore(state => state.generateForecast);
+  const recordActual = useForecastStore(state => state.recordActual);
+  const getTodayForecast = useForecastStore(state => state.getTodayForecast);
+  const getRecentForecasts = useForecastStore(state => state.getRecentForecasts);
+  const getAverageAccuracy = useForecastStore(state => state.getAverageAccuracy);
+  const deleteForecast = useForecastStore(state => state.deleteForecast);
+  const clearError = useForecastStore(state => state.clearError);
+
+  const getRecentDreams = useDreamStore(state => state.getRecentDreams);
+  const getRecentLogs = useCheckInStore(state => state.getRecentLogs);
+  const getTodayLog = useCheckInStore(state => state.getTodayLog);
   const sleepStore = useSleepStore();
 
   /**

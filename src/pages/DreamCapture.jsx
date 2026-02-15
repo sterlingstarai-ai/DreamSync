@@ -36,8 +36,12 @@ export default function DreamCapture() {
   }, [dreamError, toast, clearDreamError]);
 
   const [content, setContent] = useState('');
-  const [selectedDreamId, setSelectedDreamId] = useState(null);
-  const [showAnalysis, setShowAnalysis] = useState(false);
+
+  // URL에서 꿈 ID 확인 (lazy init)
+  const initialDreamId = searchParams.get('id');
+  const initialDream = initialDreamId ? getDreamById(initialDreamId) : null;
+  const [selectedDreamId, setSelectedDreamId] = useState(initialDream ? initialDreamId : null);
+  const [showAnalysis, setShowAnalysis] = useState(!!initialDream);
 
   // 음성 입력
   const {
@@ -52,18 +56,6 @@ export default function DreamCapture() {
       setContent(prev => prev + text);
     }
   });
-
-  // URL에서 꿈 ID 확인
-  useEffect(() => {
-    const dreamId = searchParams.get('id');
-    if (dreamId) {
-      const dream = getDreamById(dreamId);
-      if (dream) {
-        setSelectedDreamId(dreamId);
-        setShowAnalysis(true);
-      }
-    }
-  }, [searchParams, getDreamById]);
 
   const selectedDream = selectedDreamId ? getDreamById(selectedDreamId) : null;
 

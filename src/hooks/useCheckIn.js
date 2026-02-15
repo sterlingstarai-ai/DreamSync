@@ -2,6 +2,7 @@
  * 체크인 관련 훅
  */
 import { useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useCheckInStore from '../store/useCheckInStore';
 import useAuthStore from '../store/useAuthStore';
 
@@ -10,25 +11,30 @@ import useAuthStore from '../store/useAuthStore';
  * @returns {Object}
  */
 export default function useCheckIn() {
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const userId = user?.id;
 
   const {
     logs,
     isLoading,
     error,
-    addCheckIn,
-    updateCheckIn,
-    deleteCheckIn,
-    getTodayLog,
-    hasCheckedInToday,
-    getRecentLogs,
-    getStreak,
-    getAverageCondition,
-    getWeeklyCompletionRate,
-    getTopEmotions,
-    clearError,
-  } = useCheckInStore();
+  } = useCheckInStore(useShallow(state => ({
+    logs: state.logs,
+    isLoading: state.isLoading,
+    error: state.error,
+  })));
+
+  const addCheckIn = useCheckInStore(state => state.addCheckIn);
+  const updateCheckIn = useCheckInStore(state => state.updateCheckIn);
+  const deleteCheckIn = useCheckInStore(state => state.deleteCheckIn);
+  const getTodayLog = useCheckInStore(state => state.getTodayLog);
+  const hasCheckedInToday = useCheckInStore(state => state.hasCheckedInToday);
+  const getRecentLogs = useCheckInStore(state => state.getRecentLogs);
+  const getStreak = useCheckInStore(state => state.getStreak);
+  const getAverageCondition = useCheckInStore(state => state.getAverageCondition);
+  const getWeeklyCompletionRate = useCheckInStore(state => state.getWeeklyCompletionRate);
+  const getTopEmotions = useCheckInStore(state => state.getTopEmotions);
+  const clearError = useCheckInStore(state => state.clearError);
 
   /**
    * 사용자의 모든 체크인

@@ -75,12 +75,16 @@ export async function enqueue({ type, payload }) {
   }
 }
 
+let isFlushing = false;
+
 /**
  * 큐 플러시 - 모든 대기 중인 작업 실행
  * Phase 2: 여기에 Supabase 동기화 로직 추가
  */
 async function flush() {
-  if (state.items.length === 0) return;
+  if (isFlushing || state.items.length === 0) return;
+  isFlushing = true;
+  try {
 
   const pending = [...state.items];
   const failed = [];
@@ -100,6 +104,9 @@ async function flush() {
   state.items = failed;
   await persist();
   notify();
+  } finally {
+    isFlushing = false;
+  }
 }
 
 /**

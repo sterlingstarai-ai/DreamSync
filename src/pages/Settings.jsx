@@ -7,6 +7,7 @@ import {
   Smartphone, Heart, Database, Code, ToggleLeft, ToggleRight,
   Download, Trash2
 } from 'lucide-react';
+import { useShallow } from 'zustand/react/shallow';
 import {
   PageContainer, PageHeader, Card, Button, Modal, useToast
 } from '../components/common';
@@ -25,7 +26,14 @@ import storage from '../lib/adapters/storage';
 export default function Settings() {
   const toast = useToast();
   const { user, signOut, isLoading } = useAuth();
-  const settings = useSettingsStore();
+  const { notifications, privacy } = useSettingsStore(useShallow(state => ({
+    notifications: state.notifications,
+    privacy: state.privacy,
+  })));
+  const updateNotifications = useSettingsStore(state => state.updateNotifications);
+  const updatePrivacy = useSettingsStore(state => state.updatePrivacy);
+  const getAllSettings = useSettingsStore(state => state.getAllSettings);
+  const resetSettings = useSettingsStore(state => state.resetSettings);
   const { isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS, isAndroid } = useFeatureFlags();
   const { hasPermission, requestPermission, applyNotificationSettings } = useNotifications();
 
@@ -47,7 +55,7 @@ export default function Settings() {
       checkIns: useCheckInStore.getState().logs,
       symbols: useSymbolStore.getState().symbols,
       forecasts: useForecastStore.getState().forecasts,
-      settings: settings.getAllSettings(),
+      settings: getAllSettings(),
     };
 
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -68,7 +76,7 @@ export default function Settings() {
     useCheckInStore.getState().reset();
     useSymbolStore.getState().reset();
     useForecastStore.getState().reset();
-    settings.resetSettings();
+    resetSettings();
     // 스토리지 어댑터 레벨도 완전 삭제 (Capacitor Preferences 잔류 방지)
     await storage.clear();
     setShowDeleteConfirm(false);
@@ -84,8 +92,8 @@ export default function Settings() {
         return;
       }
     }
-    settings.updateNotifications({ enabled });
-    await applyNotificationSettings({ ...settings.notifications, enabled });
+    updateNotifications({ enabled });
+    await applyNotificationSettings({ ...notifications, enabled });
   };
 
   return (
@@ -120,20 +128,20 @@ export default function Settings() {
               icon={Bell}
               label="알림 활성화"
               description="리마인더 및 주간 리포트 알림"
-              enabled={settings.notifications.enabled}
+              enabled={notifications.enabled}
               onChange={handleNotificationToggle}
             />
-            {settings.notifications.enabled && (
+            {notifications.enabled && (
               <>
                 <SettingItem
                   icon={Moon}
                   label="아침 알림"
-                  value={settings.notifications.morningTime}
+                  value={notifications.morningTime}
                 />
                 <SettingItem
                   icon={Moon}
                   label="저녁 알림"
-                  value={settings.notifications.eveningTime}
+                  value={notifications.eveningTime}
                 />
               </>
             )}
@@ -145,15 +153,15 @@ export default function Settings() {
               icon={Database}
               label="사용 데이터 분석"
               description="앱 개선을 위한 익명 데이터 수집"
-              enabled={settings.privacy.analytics}
-              onChange={(v) => settings.updatePrivacy({ analytics: v })}
+              enabled={privacy.analytics}
+              onChange={(v) => updatePrivacy({ analytics: v })}
             />
             <SettingToggle
               icon={Shield}
               label="오류 보고"
               description="앱 안정성 향상을 위한 오류 보고"
-              enabled={settings.privacy.crashReports}
-              onChange={(v) => settings.updatePrivacy({ crashReports: v })}
+              enabled={privacy.crashReports}
+              onChange={(v) => updatePrivacy({ crashReports: v })}
             />
           </SettingSection>
 
@@ -393,6 +401,9 @@ function SettingToggle({ icon: ToggleIcon, label, description, enabled, onChange
         )}
       </div>
       <button
+        role="switch"
+        aria-checked={enabled}
+        aria-label={label}
         onClick={() => onChange(!enabled)}
         className="text-violet-400"
       >

@@ -9,6 +9,8 @@ import { getTodayString } from '../lib/utils/date';
 import { createForecast } from '../lib/ai/generateForecast';
 import { zustandStorage } from '../lib/adapters/storage';
 
+const MAX_FORECASTS = 365;
+
 const useForecastStore = create(
   persist(
     (set, get) => ({
@@ -52,7 +54,7 @@ const useForecastStore = create(
           };
 
           set((state) => ({
-            forecasts: [forecast, ...state.forecasts],
+            forecasts: [forecast, ...state.forecasts].slice(0, MAX_FORECASTS),
             isGenerating: false,
           }));
 

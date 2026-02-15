@@ -11,6 +11,8 @@ import { zustandStorage } from '../lib/adapters/storage';
 import logger from '../lib/utils/logger';
 import useSymbolStore from './useSymbolStore';
 
+const MAX_DREAMS = 500;
+
 const useDreamStore = create(
   persist(
     (set, get) => ({
@@ -44,7 +46,7 @@ const useDreamStore = create(
         };
 
         set((state) => ({
-          dreams: [dream, ...state.dreams],
+          dreams: [dream, ...state.dreams].slice(0, MAX_DREAMS),
           isLoading: false,
         }));
 
@@ -82,15 +84,6 @@ const useDreamStore = create(
             ),
             isAnalyzing: false,
           }));
-
-          // 심볼 사전에 동기화
-          if (result.data.symbols?.length > 0) {
-            useSymbolStore.getState().syncSymbolsFromAnalysis(
-              dream.userId,
-              dreamId,
-              result.data.symbols,
-            );
-          }
         } else {
           set({
             isAnalyzing: false,
@@ -115,13 +108,41 @@ const useDreamStore = create(
       },
 
       /**
-       * 꿈 삭제
+       * 꿈 삭제 (심볼 cascading delete 포함)
        * @param {string} dreamId
        */
       deleteDream: (dreamId) => {
+        const dream = get().dreams.find(d => d.id === dreamId);
+
         set((state) => ({
           dreams: state.dreams.filter(d => d.id !== dreamId),
         }));
+
+        // 심볼 사전에서 해당 dreamId 제거
+        if (dream?.analysis?.symbols) {
+          const symbolStore = useSymbolStore.getState();
+          const { symbols } = symbolStore;
+
+          for (const sym of dream.analysis.symbols) {
+            const stored = symbols.find(
+              s => s.userId === dream.userId && s.name === sym.name
+            );
+            if (!stored) continue;
+
+            const updatedDreamIds = stored.dreamIds.filter(id => id !== dreamId);
+            if (updatedDreamIds.length === 0) {
+              symbolStore.deleteSymbol(stored.id);
+            } else {
+              useSymbolStore.setState((state) => ({
+                symbols: state.symbols.map(s =>
+                  s.id === stored.id
+                    ? { ...s, dreamIds: updatedDreamIds, count: updatedDreamIds.length }
+                    : s
+                ),
+              }));
+            }
+          }
+        }
       },
 
       /**

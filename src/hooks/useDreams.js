@@ -2,6 +2,7 @@
  * 꿈 데이터 관련 훅
  */
 import { useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useDreamStore from '../store/useDreamStore';
 import useSymbolStore from '../store/useSymbolStore';
 import useAuthStore from '../store/useAuthStore';
@@ -11,7 +12,7 @@ import useAuthStore from '../store/useAuthStore';
  * @returns {Object}
  */
 export default function useDreams() {
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const userId = user?.id;
 
   const {
@@ -19,19 +20,25 @@ export default function useDreams() {
     isLoading,
     isAnalyzing,
     error,
-    addDream,
-    analyzeDream,
-    updateDreamContent,
-    deleteDream,
-    getDreamById,
-    getTodayDreams,
-    getRecentDreams,
-    getDreamsByDate,
-    getAllSymbols,
-    clearError,
-  } = useDreamStore();
+  } = useDreamStore(useShallow(state => ({
+    dreams: state.dreams,
+    isLoading: state.isLoading,
+    isAnalyzing: state.isAnalyzing,
+    error: state.error,
+  })));
 
-  const { syncSymbolsFromAnalysis } = useSymbolStore();
+  const addDream = useDreamStore(state => state.addDream);
+  const analyzeDream = useDreamStore(state => state.analyzeDream);
+  const updateDreamContent = useDreamStore(state => state.updateDreamContent);
+  const deleteDream = useDreamStore(state => state.deleteDream);
+  const getDreamById = useDreamStore(state => state.getDreamById);
+  const getTodayDreams = useDreamStore(state => state.getTodayDreams);
+  const getRecentDreams = useDreamStore(state => state.getRecentDreams);
+  const getDreamsByDate = useDreamStore(state => state.getDreamsByDate);
+  const getAllSymbols = useDreamStore(state => state.getAllSymbols);
+  const clearError = useDreamStore(state => state.clearError);
+
+  const syncSymbolsFromAnalysis = useSymbolStore(state => state.syncSymbolsFromAnalysis);
 
   /**
    * 사용자의 모든 꿈

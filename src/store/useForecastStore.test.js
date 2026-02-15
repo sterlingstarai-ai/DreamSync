@@ -147,4 +147,29 @@ describe('useForecastStore', () => {
     useForecastStore.getState().reset();
     expect(useForecastStore.getState().forecasts).toEqual([]);
   });
+
+  describe('data cap', () => {
+    it('should cap forecasts at MAX_FORECASTS (365)', async () => {
+      // Pre-fill with 365 forecasts (all different dates to avoid dedup)
+      const forecasts = Array.from({ length: 365 }, (_, i) => ({
+        id: `fc-${i}`,
+        userId: 'user-1',
+        date: `2025-${String(Math.floor(i / 28) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+        prediction: { condition: 3 },
+        actual: null,
+        accuracy: null,
+        createdAt: new Date(2025, 0, i + 1).toISOString(),
+      }));
+      useForecastStore.setState({ forecasts });
+
+      // Generate a new one (for a date that doesn't exist yet)
+      await useForecastStore.getState().generateForecast({
+        userId: 'user-1',
+        recentDreams: [],
+        recentLogs: [],
+      });
+
+      expect(useForecastStore.getState().forecasts.length).toBeLessThanOrEqual(365);
+    });
+  });
 });

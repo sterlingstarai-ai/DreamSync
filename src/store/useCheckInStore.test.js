@@ -168,4 +168,34 @@ describe('useCheckInStore', () => {
     useCheckInStore.getState().reset();
     expect(useCheckInStore.getState().logs).toEqual([]);
   });
+
+  describe('data cap', () => {
+    it('should cap check-ins at MAX_CHECKINS (365)', async () => {
+      // Pre-fill with 365 logs (all different dates)
+      const logs = Array.from({ length: 365 }, (_, i) => ({
+        id: `log-${i}`,
+        userId: 'user-cap',
+        date: `2025-${String(Math.floor(i / 28) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+        condition: 3,
+        emotions: [],
+        stressLevel: 3,
+        events: [],
+        note: null,
+        sleep: null,
+        createdAt: new Date(2025, 0, i + 1).toISOString(),
+      }));
+      useCheckInStore.setState({ logs });
+
+      // Add a new check-in (different user to avoid same-day update)
+      await useCheckInStore.getState().addCheckIn({
+        userId: 'user-cap-new',
+        condition: 5,
+        emotions: ['happy'],
+        stressLevel: 1,
+        events: [],
+      });
+
+      expect(useCheckInStore.getState().logs.length).toBeLessThanOrEqual(365);
+    });
+  });
 });
