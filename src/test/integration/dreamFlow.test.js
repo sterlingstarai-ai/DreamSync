@@ -66,19 +66,13 @@ describe('Dream → Report 전체 플로우', () => {
     expect(analyzedDream.analysis.symbols[0].name).toBe('바다');
     expect(analyzedDream.analysis.emotions).toHaveLength(1);
 
-    // 3. 심볼 동기화 (Fix 11: 크로스 스토어 제거로 훅 레벨에서 수동 호출)
-    useSymbolStore.getState().syncSymbolsFromAnalysis(
-      TEST_USER_ID, dream.id, analyzedDream.analysis.symbols
-    );
-
-    // 4. 심볼 사전에 동기화 확인
-    const symbols = useSymbolStore.getState().getUserSymbols(TEST_USER_ID);
-    expect(symbols.length).toBeGreaterThanOrEqual(2);
-
-    const seaSymbol = useSymbolStore.getState().getSymbolByName(TEST_USER_ID, '바다');
-    expect(seaSymbol).toBeDefined();
-    expect(seaSymbol.count).toBe(1);
-    expect(seaSymbol.dreamIds).toContain(dream.id);
+    // 3. 심볼 사전에 자동 동기화 확인
+    await vi.waitFor(() => {
+      const seaSymbol = useSymbolStore.getState().getSymbolByName(TEST_USER_ID, '바다');
+      expect(seaSymbol).toBeDefined();
+      expect(seaSymbol.count).toBe(1);
+      expect(seaSymbol.dreamIds).toContain(dream.id);
+    });
   });
 
   it('체크인 → 예보 생성 → 정확도 기록', async () => {
@@ -126,12 +120,6 @@ describe('Dream → Report 전체 플로우', () => {
       expect(useDreamStore.getState().getDreamById(dream1.id).analysis).not.toBeNull();
     });
 
-    // 심볼 동기화 (Fix 11: 훅 레벨에서 수동 호출)
-    const dream1Analysis = useDreamStore.getState().getDreamById(dream1.id);
-    useSymbolStore.getState().syncSymbolsFromAnalysis(
-      TEST_USER_ID, dream1.id, dream1Analysis.analysis.symbols
-    );
-
     // 두 번째 꿈 (같은 심볼)
     const dream2 = await useDreamStore.getState().addDream({
       content: '다시 바다에 갔다',
@@ -143,17 +131,13 @@ describe('Dream → Report 전체 플로우', () => {
       expect(useDreamStore.getState().getDreamById(dream2.id).analysis).not.toBeNull();
     });
 
-    // 심볼 동기화
-    const dream2Analysis = useDreamStore.getState().getDreamById(dream2.id);
-    useSymbolStore.getState().syncSymbolsFromAnalysis(
-      TEST_USER_ID, dream2.id, dream2Analysis.analysis.symbols
-    );
-
     // 심볼 빈도 누적 확인
-    const seaSymbol = useSymbolStore.getState().getSymbolByName(TEST_USER_ID, '바다');
-    expect(seaSymbol.count).toBe(2);
-    expect(seaSymbol.dreamIds).toContain(dream1.id);
-    expect(seaSymbol.dreamIds).toContain(dream2.id);
+    await vi.waitFor(() => {
+      const seaSymbol = useSymbolStore.getState().getSymbolByName(TEST_USER_ID, '바다');
+      expect(seaSymbol.count).toBe(2);
+      expect(seaSymbol.dreamIds).toContain(dream1.id);
+      expect(seaSymbol.dreamIds).toContain(dream2.id);
+    });
   });
 
   it('꿈 + 체크인 → 예보 → 주간 통계 종합', async () => {

@@ -7,14 +7,17 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 import { ToastProvider } from './components/common/Toast';
 import { PageLoading } from './components/common/Loading';
 import Router from './Router';
-import { initializeAdapters } from './lib/adapters';
+import { initializeAdapters, setAIAdapter } from './lib/adapters';
 import { initSyncQueue } from './lib/offline/syncQueue';
+import useFeatureFlagStore from './store/useFeatureFlagStore';
 import logger from './lib/utils/logger';
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
+    let unsubscribeFlags;
+
     async function init() {
       try {
         // Capacitor 초기화
@@ -28,6 +31,18 @@ function App() {
         };
         initializeAdapters(config);
 
+        // Feature Flag edgeAI 값 동기화 (hydration 이후 변경도 반영)
+        const applyEdgeAIFlag = (enabled) => {
+          setAIAdapter(enabled ? 'edge' : (import.meta.env.VITE_AI || 'mock'));
+        };
+
+        applyEdgeAIFlag(useFeatureFlagStore.getState().getFlag('edgeAI'));
+        unsubscribeFlags = useFeatureFlagStore.subscribe((state, prevState) => {
+          if (state.flags.edgeAI !== prevState.flags.edgeAI) {
+            applyEdgeAIFlag(state.flags.edgeAI);
+          }
+        });
+
         // 오프라인 동기화 큐 초기화
         await initSyncQueue();
 
@@ -38,6 +53,12 @@ function App() {
       }
     }
     init();
+
+    return () => {
+      if (typeof unsubscribeFlags === 'function') {
+        unsubscribeFlags();
+      }
+    };
   }, []);
 
   if (!isInitialized) {

@@ -40,6 +40,7 @@ const useDreamStore = create(
           userId,
           content,
           voiceUrl: voiceUrl || null,
+          date: getTodayString(),
           analysis: null,
           createdAt: now,
           updatedAt: now,
@@ -76,14 +77,25 @@ const useDreamStore = create(
         const result = await analyzeDream(dream.content);
 
         if (result.success) {
+          const analysis = result.data;
+
           set((state) => ({
             dreams: state.dreams.map(d =>
               d.id === dreamId
-                ? { ...d, analysis: result.data, updatedAt: new Date().toISOString() }
+                ? { ...d, analysis, updatedAt: new Date().toISOString() }
                 : d
             ),
             isAnalyzing: false,
           }));
+
+          // 분석 성공 시 심볼 사전 자동 동기화
+          if (dream.userId && Array.isArray(analysis?.symbols) && analysis.symbols.length > 0) {
+            useSymbolStore.getState().syncSymbolsFromAnalysis(
+              dream.userId,
+              dreamId,
+              analysis.symbols,
+            );
+          }
         } else {
           set({
             isAnalyzing: false,

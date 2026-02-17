@@ -1,11 +1,11 @@
 /**
  * 대시보드 (홈) 페이지
  */
-import { useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Moon, Sun, Sparkles, TrendingUp, Calendar,
-  ChevronRight, Plus, CheckCircle2, AlertTriangle
+  ChevronRight, CheckCircle2, AlertTriangle, Search
 } from 'lucide-react';
 import {
   PageContainer, Card, Button, Skeleton
@@ -22,19 +22,45 @@ import useFeatureFlags from '../hooks/useFeatureFlags';
 import useSleepStore from '../store/useSleepStore';
 import { formatFriendlyDate } from '../lib/utils/date';
 import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast';
+import { detectPatternAlerts } from '../lib/services/patternAlertService';
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = useAuthStore(useShallow(state => state.user));
   const { todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
-  const { checkedInToday, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
-  const { todayForecast, createTodayForecast, isGenerating, confidence: calculatedConfidence, error: forecastError, clearError: clearForecastError } = useForecast();
+  const {
+    checkedInToday,
+    recentLogs,
+    stats: checkInStats,
+    error: checkInError,
+    clearError: clearCheckInError,
+  } = useCheckIn();
+  const {
+    todayForecast,
+    createTodayForecast,
+    isGenerating,
+    confidence: calculatedConfidence,
+    error: forecastError,
+    clearError: clearForecastError,
+    yesterdayForecast,
+    yesterdayLog,
+    canReviewYesterdayForecast,
+    reviewYesterdayForecast,
+    toggleTodaySuggestion,
+    todayActionProgress,
+  } = useForecast();
   const { isUHSEnabled } = useFeatureFlags();
 
   const activeError = dreamError || checkInError || forecastError;
 
   const greeting = getGreeting();
   const userName = user?.name || '사용자';
+  const patternAlerts = useMemo(() => {
+    return detectPatternAlerts({
+      recentLogs,
+      recentDreams,
+    });
+  }, [recentLogs, recentDreams]);
 
   // 페이지 로드 시 오늘 예보 생성 (최소 데이터 + 에러 가드)
   const hasMinimumData = recentDreams.length > 0 || checkedInToday;
@@ -72,14 +98,32 @@ export default function Dashboard() {
         )}
 
         {/* Today's Forecast Card */}
+        {patternAlerts.length > 0 && (
+          <section className="mb-4">
+            <PatternAlertCard alerts={patternAlerts} />
+          </section>
+        )}
+
         <section className="mb-6">
           <ForecastCard
             forecast={todayForecast}
             isLoading={isGenerating}
             confidence={calculatedConfidence}
             hasMinimumData={hasMinimumData}
+            onToggleSuggestion={toggleTodaySuggestion}
+            actionProgress={todayActionProgress}
           />
         </section>
+
+        {canReviewYesterdayForecast && yesterdayForecast && yesterdayLog && (
+          <section className="mb-6">
+            <ForecastReviewCard
+              forecast={yesterdayForecast}
+              log={yesterdayLog}
+              onReview={reviewYesterdayForecast}
+            />
+          </section>
+        )}
 
         {/* Quick Actions */}
         <section className="grid grid-cols-2 gap-3 mb-6">
@@ -151,14 +195,24 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">
                 최근 꿈
               </h2>
-              <button
-                onClick={() => navigate('/symbols')}
-                aria-label="심볼 사전 보기"
-                className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
-              >
-                심볼 사전
-                <ChevronRight className="w-4 h-4" aria-hidden="true" />
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => navigate('/search')}
+                  aria-label="통합 검색 보기"
+                  className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                >
+                  통합 검색
+                  <Search className="w-4 h-4" aria-hidden="true" />
+                </button>
+                <button
+                  onClick={() => navigate('/symbols')}
+                  aria-label="심볼 사전 보기"
+                  className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  심볼 사전
+                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
             </div>
 
             <div className="space-y-3">
@@ -189,7 +243,14 @@ function getGreeting() {
 /**
  * 오늘의 예보 카드
  */
-function ForecastCard({ forecast, isLoading, confidence, hasMinimumData }) {
+function ForecastCard({
+  forecast,
+  isLoading,
+  confidence,
+  hasMinimumData,
+  onToggleSuggestion,
+  actionProgress,
+}) {
   if (isLoading) {
     return (
       <Card variant="gradient" padding="lg">
@@ -255,21 +316,145 @@ function ForecastCard({ forecast, isLoading, confidence, hasMinimumData }) {
       </p>
 
       {prediction.suggestions.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {prediction.suggestions.map((suggestion, i) => (
-            <span
-              key={i}
-              className="text-xs px-2 py-1 rounded-full bg-violet-500/10 text-violet-300"
-            >
-              {suggestion}
-            </span>
-          ))}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-[var(--text-muted)]">오늘의 추천 행동</p>
+            <p className="text-xs text-violet-300">
+              {actionProgress?.completed || 0}/{actionProgress?.total || prediction.suggestions.length} 실천
+            </p>
+          </div>
+          <div className="space-y-1.5">
+            {prediction.suggestions.map((suggestion, i) => {
+              const completed = (forecast.experiment?.completedSuggestions || []).includes(suggestion);
+              return (
+                <button
+                  key={i}
+                  onClick={() => onToggleSuggestion?.(suggestion)}
+                  className={`w-full text-left text-xs px-2.5 py-2 rounded-lg border transition-colors ${
+                    completed
+                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
+                      : 'bg-violet-500/10 text-violet-300 border-violet-500/20 hover:bg-violet-500/20'
+                  }`}
+                >
+                  {completed ? '✓ ' : ''}{suggestion}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
       <p className="text-xs text-[var(--text-muted)] mt-3 opacity-70">
         데이터 기반 참고 지표이며, 의료적 조언이 아닙니다.
       </p>
+    </Card>
+  );
+}
+
+function PatternAlertCard({ alerts }) {
+  const top = alerts[0];
+  const colorClass = top?.severity === 'high'
+    ? 'bg-red-500/10 border-red-500/30 text-red-300'
+    : 'bg-amber-500/10 border-amber-500/30 text-amber-300';
+
+  return (
+    <Card padding="md" className={`border ${colorClass}`}>
+      <div className="flex items-start gap-3">
+        <AlertTriangle className="w-5 h-5 mt-0.5" />
+        <div className="flex-1 min-w-0">
+          <p className="font-medium">{top.title}</p>
+          <p className="text-sm opacity-90 mt-1">{top.description}</p>
+          {alerts.length > 1 && (
+            <p className="text-xs opacity-80 mt-2">
+              추가 경보 {alerts.length - 1}건이 함께 감지되었습니다.
+            </p>
+          )}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+const HIT_REASONS = ['수면이 좋아서', '스트레스를 잘 관리해서', '추천 행동을 실천해서'];
+const MISS_REASONS = ['수면이 부족해서', '예상 못한 스트레스가 생겨서', '일정 변동이 커서'];
+
+function ForecastReviewCard({ forecast, log, onReview }) {
+  const [selectedOutcome, setSelectedOutcome] = useState('hit');
+  const [selectedReasons, setSelectedReasons] = useState([HIT_REASONS[0]]);
+
+  const toggleReason = (reason) => {
+    setSelectedReasons((prev) => (
+      prev.includes(reason)
+        ? prev.filter(item => item !== reason)
+        : [...prev, reason]
+    ));
+  };
+
+  const handleQuickReview = (outcome) => {
+    const reasonPool = outcome === 'hit' ? HIT_REASONS : MISS_REASONS;
+    const reasons = selectedOutcome === outcome
+      ? (selectedReasons.length > 0 ? selectedReasons : [reasonPool[0]])
+      : [reasonPool[0]];
+    onReview?.({ outcome, reasons });
+  };
+
+  const reasonOptions = selectedOutcome === 'hit' ? HIT_REASONS : MISS_REASONS;
+
+  return (
+    <Card padding="lg">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-[var(--text-primary)]">어제 예보 검증</h3>
+        <span className="text-xs text-[var(--text-muted)]">1탭 기록</span>
+      </div>
+
+      <div className="text-sm text-[var(--text-secondary)] mb-3">
+        예보 <strong className="text-[var(--text-primary)]">{getConditionLabel(forecast.prediction.condition)}</strong>
+        {' '}→ 실제 <strong className="text-[var(--text-primary)]">{getConditionLabel(log.condition)}</strong>
+      </div>
+
+      <div className="flex gap-2 mb-3">
+        <Button fullWidth onClick={() => handleQuickReview('hit')}>
+          맞았어요
+        </Button>
+        <Button fullWidth variant="secondary" onClick={() => handleQuickReview('miss')}>
+          빗나갔어요
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {['hit', 'miss'].map((outcome) => (
+          <button
+            key={outcome}
+            onClick={() => {
+              setSelectedOutcome(outcome);
+              setSelectedReasons([outcome === 'hit' ? HIT_REASONS[0] : MISS_REASONS[0]]);
+            }}
+            className={`text-xs px-2 py-1 rounded-full ${
+              selectedOutcome === outcome
+                ? 'bg-violet-500/20 text-violet-300'
+                : 'bg-[var(--bg-tertiary)] text-[var(--text-muted)]'
+            }`}
+          >
+            {outcome === 'hit' ? '적중 이유' : '빗나간 이유'}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-wrap gap-2 mt-2">
+        {reasonOptions.map((reason) => (
+          <button
+            key={reason}
+            onClick={() => toggleReason(reason)}
+            className={`text-xs px-2 py-1 rounded-full border ${
+              selectedReasons.includes(reason)
+                ? 'border-violet-500/50 bg-violet-500/15 text-violet-300'
+                : 'border-[var(--border-color)] bg-[var(--bg-secondary)] text-[var(--text-muted)]'
+            }`}
+          >
+            {reason}
+          </button>
+        ))}
+      </div>
     </Card>
   );
 }

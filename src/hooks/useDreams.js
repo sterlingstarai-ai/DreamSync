@@ -4,7 +4,6 @@
 import { useCallback, useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import useDreamStore from '../store/useDreamStore';
-import useSymbolStore from '../store/useSymbolStore';
 import useAuthStore from '../store/useAuthStore';
 
 /**
@@ -37,8 +36,6 @@ export default function useDreams() {
   const getDreamsByDate = useDreamStore(state => state.getDreamsByDate);
   const getAllSymbols = useDreamStore(state => state.getAllSymbols);
   const clearError = useDreamStore(state => state.clearError);
-
-  const syncSymbolsFromAnalysis = useSymbolStore(state => state.syncSymbolsFromAnalysis);
 
   /**
    * 사용자의 모든 꿈
@@ -85,12 +82,7 @@ export default function useDreams() {
    */
   const analyzeAndSyncSymbols = useCallback(async (dreamId) => {
     await analyzeDream(dreamId);
-
-    const dream = getDreamById(dreamId);
-    if (dream?.analysis?.symbols && userId) {
-      syncSymbolsFromAnalysis(userId, dreamId, dream.analysis.symbols);
-    }
-  }, [analyzeDream, getDreamById, syncSymbolsFromAnalysis, userId]);
+  }, [analyzeDream]);
 
   /**
    * 꿈 삭제

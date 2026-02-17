@@ -2,6 +2,7 @@
  * 심볼 사전 페이지
  */
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Search, Book, X, Edit2, Check, Moon } from 'lucide-react';
 import {
   PageContainer, PageHeader, Card, Input, Button, Modal, EmptyState, useToast
@@ -11,6 +12,7 @@ import useSymbols from '../hooks/useSymbols';
 import { formatFriendlyDate } from '../lib/utils/date';
 
 export default function SymbolDictionary() {
+  const navigate = useNavigate();
   const toast = useToast();
   const {
     displaySymbols,
@@ -56,6 +58,14 @@ export default function SymbolDictionary() {
         <PageHeader
           title="심볼 사전"
           subtitle={`${totalCount}개의 심볼`}
+          rightAction={(
+            <button
+              onClick={() => navigate('/search')}
+              className="text-xs px-2.5 py-1.5 rounded-lg bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-colors"
+            >
+              통합 검색
+            </button>
+          )}
         />
 
         {/* 검색 */}

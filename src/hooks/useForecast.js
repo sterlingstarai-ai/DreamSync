@@ -9,6 +9,7 @@ import useCheckInStore from '../store/useCheckInStore';
 import useAuthStore from '../store/useAuthStore';
 import useSleepStore from '../store/useSleepStore';
 import { calculateConfidence } from '../lib/scoring/confidence';
+import { getDaysAgo } from '../lib/utils/date';
 
 /**
  * 예보 훅
@@ -33,15 +34,21 @@ export default function useForecast() {
   const generateForecast = useForecastStore(state => state.generateForecast);
   const recordActual = useForecastStore(state => state.recordActual);
   const getTodayForecast = useForecastStore(state => state.getTodayForecast);
+  const getForecastByDate = useForecastStore(state => state.getForecastByDate);
   const getRecentForecasts = useForecastStore(state => state.getRecentForecasts);
   const getAverageAccuracy = useForecastStore(state => state.getAverageAccuracy);
+  const getExperimentSummary = useForecastStore(state => state.getExperimentSummary);
+  const getReviewStats = useForecastStore(state => state.getReviewStats);
+  const toggleActionSuggestion = useForecastStore(state => state.toggleActionSuggestion);
   const deleteForecast = useForecastStore(state => state.deleteForecast);
   const clearError = useForecastStore(state => state.clearError);
 
   const getRecentDreams = useDreamStore(state => state.getRecentDreams);
   const getRecentLogs = useCheckInStore(state => state.getRecentLogs);
   const getTodayLog = useCheckInStore(state => state.getTodayLog);
+  const getLogByDate = useCheckInStore(state => state.getLogByDate);
   const sleepStore = useSleepStore();
+  const yesterdayDate = getDaysAgo(1);
 
   /**
    * 사용자의 모든 예보
@@ -60,6 +67,23 @@ export default function useForecast() {
   }, [userId, getTodayForecast, forecasts]);
 
   /**
+   * 어제 예보/체크인 (예보 검증 루프)
+   */
+  const yesterdayForecast = useMemo(() => {
+    if (!userId) return null;
+    return getForecastByDate(userId, yesterdayDate) || null;
+  }, [userId, getForecastByDate, yesterdayDate, forecasts]);
+
+  const yesterdayLog = useMemo(() => {
+    if (!userId) return null;
+    return getLogByDate(userId, yesterdayDate) || null;
+  }, [userId, getLogByDate, yesterdayDate]);
+
+  const canReviewYesterdayForecast = useMemo(() => {
+    return Boolean(yesterdayForecast && !yesterdayForecast.actual && yesterdayLog);
+  }, [yesterdayForecast, yesterdayLog]);
+
+  /**
    * 최근 예보 목록
    */
   const recentForecasts = useMemo(() => {
@@ -74,6 +98,55 @@ export default function useForecast() {
     if (!userId) return 0;
     return getAverageAccuracy(userId);
   }, [userId, getAverageAccuracy, forecasts]);
+
+  /**
+   * 행동 실험 통계
+   */
+  const experimentSummary = useMemo(() => {
+    if (!userId) {
+      return {
+        sampleSize: 0,
+        highCompletionDays: 0,
+        lowCompletionDays: 0,
+        avgConditionHighCompletion: 0,
+        avgConditionLowCompletion: 0,
+        improvement: 0,
+      };
+    }
+    return getExperimentSummary(userId, 30);
+  }, [userId, getExperimentSummary, forecasts]);
+
+  /**
+   * 예보 검증 통계
+   */
+  const reviewStats = useMemo(() => {
+    if (!userId) {
+      return {
+        verifiedCount: 0,
+        hitCount: 0,
+        missCount: 0,
+        partialCount: 0,
+      };
+    }
+    return getReviewStats(userId, 30);
+  }, [userId, getReviewStats, forecasts]);
+
+  /**
+   * 오늘 추천 행동 실천 진행도
+   */
+  const todayActionProgress = useMemo(() => {
+    if (!todayForecast) return { total: 0, completed: 0, completionRate: 0 };
+    const planned = todayForecast.experiment?.plannedSuggestions || todayForecast.prediction?.suggestions || [];
+    const completed = todayForecast.experiment?.completedSuggestions || [];
+    const completionRate = planned.length > 0
+      ? Math.round((completed.length / planned.length) * 100)
+      : 0;
+    return {
+      total: planned.length,
+      completed: completed.length,
+      completionRate,
+    };
+  }, [todayForecast]);
 
   /**
    * 실시간 Confidence 점수 (웨어러블 데이터 포함)
@@ -147,8 +220,64 @@ export default function useForecast() {
     recordActual(todayForecast.id, {
       condition: todayLog.condition,
       emotions: todayLog.emotions,
+      outcome: 'partial',
+      reasons: ['저녁 체크인 자동 기록'],
+      recordedAt: new Date().toISOString(),
     });
   }, [userId, todayForecast, getTodayLog, recordActual]);
+
+  /**
+   * 예보 검증 기록
+   */
+  const reviewForecast = useCallback(({
+    forecastId,
+    condition,
+    emotions = [],
+    outcome = 'partial',
+    reasons = [],
+  }) => {
+    if (!forecastId || typeof condition !== 'number') return false;
+    recordActual(forecastId, {
+      condition,
+      emotions,
+      outcome,
+      reasons,
+      recordedAt: new Date().toISOString(),
+    });
+    return true;
+  }, [recordActual]);
+
+  /**
+   * 어제 예보 검증 (1탭 루프용)
+   */
+  const reviewYesterdayForecast = useCallback(({
+    outcome = 'partial',
+    reasons = [],
+  } = {}) => {
+    if (!canReviewYesterdayForecast || !yesterdayForecast || !yesterdayLog) {
+      return false;
+    }
+
+    return reviewForecast({
+      forecastId: yesterdayForecast.id,
+      condition: yesterdayLog.condition,
+      emotions: yesterdayLog.emotions || [],
+      outcome,
+      reasons,
+    });
+  }, [canReviewYesterdayForecast, yesterdayForecast, yesterdayLog, reviewForecast]);
+
+  /**
+   * 추천 행동 토글
+   */
+  const toggleSuggestionCompletion = useCallback((forecastId, suggestion) => {
+    toggleActionSuggestion(forecastId, suggestion);
+  }, [toggleActionSuggestion]);
+
+  const toggleTodaySuggestion = useCallback((suggestion) => {
+    if (!todayForecast) return;
+    toggleActionSuggestion(todayForecast.id, suggestion);
+  }, [todayForecast, toggleActionSuggestion]);
 
   /**
    * 예보 삭제
@@ -166,14 +295,22 @@ export default function useForecast() {
       totalForecasts: userForecasts.length,
       verifiedCount: verified.length,
       averageAccuracy,
+      review: reviewStats,
+      experiments: experimentSummary,
     };
-  }, [userForecasts, averageAccuracy]);
+  }, [userForecasts, averageAccuracy, reviewStats, experimentSummary]);
 
   return {
     // 상태
     forecasts: userForecasts,
     todayForecast,
+    yesterdayForecast,
+    yesterdayLog,
+    canReviewYesterdayForecast,
     recentForecasts,
+    todayActionProgress,
+    experimentSummary,
+    reviewStats,
     stats,
     confidence,
     isLoading,
@@ -183,6 +320,10 @@ export default function useForecast() {
     // 액션
     createTodayForecast,
     recordActualFromCheckIn,
+    reviewForecast,
+    reviewYesterdayForecast,
+    toggleSuggestionCompletion,
+    toggleTodaySuggestion,
     removeForecast,
     clearError,
   };

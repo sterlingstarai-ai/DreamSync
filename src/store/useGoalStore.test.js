@@ -1,0 +1,47 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import useGoalStore, { DEFAULT_WEEKLY_GOALS } from './useGoalStore';
+
+describe('useGoalStore', () => {
+  beforeEach(() => {
+    useGoalStore.getState().reset();
+  });
+
+  it('returns default goals for a new user', () => {
+    const goals = useGoalStore.getState().getGoals('user-1');
+    expect(goals).toEqual(DEFAULT_WEEKLY_GOALS);
+  });
+
+  it('updates and persists user goals', () => {
+    useGoalStore.getState().updateGoals('user-1', {
+      checkInDays: 6,
+      dreamCount: 5,
+      avgSleepHours: 7.5,
+    });
+
+    const goals = useGoalStore.getState().getGoals('user-1');
+    expect(goals.checkInDays).toBe(6);
+    expect(goals.dreamCount).toBe(5);
+    expect(goals.avgSleepHours).toBe(7.5);
+  });
+
+  it('calculates weekly progress from logs and dreams', () => {
+    const progress = useGoalStore.getState().getWeeklyProgress('user-1', {
+      logs: [
+        { date: '2026-02-17', sleep: { duration: 480 } },
+        { date: '2026-02-16', sleep: { duration: 420 } },
+        { date: '2026-02-15', sleep: { duration: 360 } },
+      ],
+      dreams: [
+        { date: '2026-02-17' },
+        { date: '2026-02-16' },
+        { date: '2026-02-15' },
+        { date: '2026-02-14' },
+      ],
+    });
+
+    expect(progress.metrics.checkInDays).toBe(3);
+    expect(progress.metrics.dreamCount).toBe(4);
+    expect(progress.metrics.avgSleepHours).toBe(7);
+    expect(progress.progress.dreamCount.achieved).toBe(true);
+  });
+});

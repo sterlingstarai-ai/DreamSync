@@ -34,12 +34,12 @@ const STEPS = [
 ];
 
 export default function Onboarding() {
-  const { completeOnboarding } = useAuth();
+  const { user, completeOnboarding } = useAuth();
   const { requestPermission, scheduleMorningReminder, scheduleEveningReminder, scheduleWeeklyReportReminder } = useNotifications();
 
   const [currentStep, setCurrentStep] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
-  const [sampleLoaded, setSampleLoaded] = useState(false);
+  const [sampleStatus, setSampleStatus] = useState('idle');
 
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
@@ -138,19 +138,25 @@ export default function Onboarding() {
             )}
 
             {/* 샘플 데이터 로드 */}
-            {!sampleLoaded ? (
+            {sampleStatus === 'idle' ? (
               <button
                 onClick={() => {
-                  loadSampleData('local-user');
-                  setSampleLoaded(true);
+                  const result = loadSampleData(user?.id || 'local-user');
+                  setSampleStatus(result.added ? 'added' : 'existing');
                 }}
                 className="w-full text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] py-2"
               >
                 데모 데이터로 시작하기
               </button>
             ) : (
-              <p className="text-sm text-emerald-400 text-center py-2">
-                샘플 데이터가 추가되었어요
+              <p
+                className={`text-sm text-center py-2 ${
+                  sampleStatus === 'added' ? 'text-emerald-400' : 'text-[var(--text-muted)]'
+                }`}
+              >
+                {sampleStatus === 'added'
+                  ? '샘플 데이터가 추가되었어요'
+                  : '이미 데모 데이터가 적용되어 있어요'}
               </p>
             )}
           </div>

@@ -1,184 +1,164 @@
 /**
  * CheckIn Service
  *
- * 체크인 저장, 조회, 통계를 담당하는 서비스 레이어
+ * Store 기반 체크인 접근/집계 서비스.
  */
 
-import { generateId } from '../utils/id';
-import { getTodayString, getDaysAgo } from '../utils/date';
+import { getDaysAgo } from '../utils/date';
 import useCheckInStore from '../../store/useCheckInStore';
 
 /**
  * 체크인 저장
+ * @param {Object} data
+ * @param {string} data.userId
  */
 export function saveCheckIn(data) {
-  const store = useCheckInStore.getState();
-  const today = getTodayString();
+  if (!data?.userId) {
+    throw new Error('saveCheckIn requires userId');
+  }
 
-  const checkIn = {
-    id: generateId(),
-    date: today,
-    ...data,
-    createdAt: new Date().toISOString(),
-  };
-
-  store.addLog(checkIn);
-  return checkIn;
+  return useCheckInStore.getState().addCheckIn(data);
 }
 
 /**
  * 오늘 체크인 여부
+ * @param {string} userId
  */
-export function hasCheckedInToday() {
-  const store = useCheckInStore.getState();
-  const today = getTodayString();
-  return store.logs.some(log => log.date === today);
+export function hasCheckedInToday(userId) {
+  if (!userId) return false;
+  return useCheckInStore.getState().hasCheckedInToday(userId);
 }
 
 /**
  * 오늘 체크인 조회
+ * @param {string} userId
  */
-export function getTodayCheckIn() {
-  const store = useCheckInStore.getState();
-  const today = getTodayString();
-  return store.logs.find(log => log.date === today);
+export function getTodayCheckIn(userId) {
+  if (!userId) return null;
+  return useCheckInStore.getState().getTodayLog(userId);
 }
 
 /**
- * 최근 N일 체크인 조회
+ * 최근 N일 체크인
+ * @param {string} userId
+ * @param {number} [days=7]
  */
-export function getRecentCheckIns(days = 7) {
-  const store = useCheckInStore.getState();
-  const cutoff = getDaysAgo(days);
-
-  return store.logs.filter(log => log.date >= cutoff);
+export function getRecentCheckIns(userId, days = 7) {
+  if (!userId) return [];
+  return useCheckInStore.getState().getRecentLogs(userId, days);
 }
 
 /**
- * 체크인 연속 기록 계산
+ * 연속 체크인 일수
+ * @param {string} userId
  */
-export function calculateStreak() {
-  const store = useCheckInStore.getState();
-  const sortedLogs = [...store.logs].sort((a, b) => b.date.localeCompare(a.date));
-
-  if (sortedLogs.length === 0) return 0;
-
-  let streak = 0;
-  let currentDate = new Date();
-  currentDate.setHours(0, 0, 0, 0);
-
-  for (let i = 0; i < 365; i++) { // 최대 1년
-    const dateStr = currentDate.toISOString().split('T')[0];
-    const hasLog = sortedLogs.some(log => log.date === dateStr);
-
-    if (hasLog) {
-      streak++;
-      currentDate.setDate(currentDate.getDate() - 1);
-    } else if (i === 0) {
-      // 오늘 체크인 안 했으면 어제부터 계산
-      currentDate.setDate(currentDate.getDate() - 1);
-    } else {
-      break;
-    }
-  }
-
-  return streak;
+export function calculateStreak(userId) {
+  if (!userId) return 0;
+  return useCheckInStore.getState().getStreak(userId);
 }
 
 /**
- * 체크인 완료율 계산 (최근 7일)
+ * 체크인 완료율
+ * @param {string} userId
+ * @param {number} [days=7]
  */
-export function calculateCompletionRate(days = 7) {
-  const recentCheckIns = getRecentCheckIns(days);
-  return Math.round((recentCheckIns.length / days) * 100);
+export function calculateCompletionRate(userId, days = 7) {
+  if (!userId) return 0;
+  const logs = getRecentCheckIns(userId, days);
+  return Math.round((logs.length / days) * 100);
 }
 
 /**
  * 체크인 통계
+ * @param {string} userId
+ * @param {number} [days=7]
  */
-export function getCheckInStats(days = 7) {
-  const checkIns = getRecentCheckIns(days);
-
-  if (checkIns.length === 0) {
+export function getCheckInStats(userId, days = 7) {
+  if (!userId) {
     return {
       count: 0,
       avgCondition: 0,
       avgStress: 0,
       completionRate: 0,
-      streak: calculateStreak(),
+      streak: 0,
     };
   }
 
-  // 평균 컨디션
-  const conditions = checkIns.filter(c => c.condition).map(c => c.condition);
-  const avgCondition = conditions.length > 0
-    ? conditions.reduce((a, b) => a + b, 0) / conditions.length
-    : 0;
+  const store = useCheckInStore.getState();
+  const logs = store.getRecentLogs(userId, days);
 
-  // 평균 스트레스
-  const stresses = checkIns.filter(c => c.stressLevel).map(c => c.stressLevel);
-  const avgStress = stresses.length > 0
-    ? stresses.reduce((a, b) => a + b, 0) / stresses.length
-    : 0;
+  if (logs.length === 0) {
+    return {
+      count: 0,
+      avgCondition: 0,
+      avgStress: 0,
+      completionRate: 0,
+      streak: store.getStreak(userId),
+    };
+  }
+
+  const avgCondition = logs.reduce((sum, l) => sum + l.condition, 0) / logs.length;
+  const avgStress = logs.reduce((sum, l) => sum + l.stressLevel, 0) / logs.length;
 
   return {
-    count: checkIns.length,
+    count: logs.length,
     avgCondition: Math.round(avgCondition * 10) / 10,
     avgStress: Math.round(avgStress * 10) / 10,
-    completionRate: calculateCompletionRate(days),
-    streak: calculateStreak(),
+    completionRate: calculateCompletionRate(userId, days),
+    streak: store.getStreak(userId),
   };
 }
 
 /**
- * 컨디션 추이 데이터 (차트용)
+ * 컨디션 추이
+ * @param {string} userId
+ * @param {number} [days=7]
  */
-export function getConditionTrend(days = 7) {
-  const checkIns = getRecentCheckIns(days);
+export function getConditionTrend(userId, days = 7) {
+  if (!userId) return [];
+
+  const logs = getRecentCheckIns(userId, days);
   const trend = [];
 
   for (let i = days - 1; i >= 0; i--) {
     const date = getDaysAgo(i);
-    const checkIn = checkIns.find(c => c.date === date);
-
-    trend.push({
-      date,
-      value: checkIn?.condition || 0,
-    });
+    const log = logs.find(c => c.date === date);
+    trend.push({ date, value: log?.condition || 0 });
   }
 
   return trend;
 }
 
 /**
- * 스트레스 추이 데이터 (차트용)
+ * 스트레스 추이
+ * @param {string} userId
+ * @param {number} [days=7]
  */
-export function getStressTrend(days = 7) {
-  const checkIns = getRecentCheckIns(days);
+export function getStressTrend(userId, days = 7) {
+  if (!userId) return [];
+
+  const logs = getRecentCheckIns(userId, days);
   const trend = [];
 
   for (let i = days - 1; i >= 0; i--) {
     const date = getDaysAgo(i);
-    const checkIn = checkIns.find(c => c.date === date);
-
-    trend.push({
-      date,
-      value: checkIn?.stressLevel || 0,
-    });
+    const log = logs.find(c => c.date === date);
+    trend.push({ date, value: log?.stressLevel || 0 });
   }
 
   return trend;
 }
 
 /**
- * 데이터 내보내기 (JSON)
+ * 데이터 내보내기
+ * @param {string} [userId]
  */
-export function exportCheckIns() {
-  const store = useCheckInStore.getState();
+export function exportCheckIns(userId) {
+  const all = useCheckInStore.getState().logs;
   return {
     exportedAt: new Date().toISOString(),
-    version: '1.0',
-    checkIns: store.logs,
+    version: '1.1',
+    checkIns: userId ? all.filter(l => l.userId === userId) : all,
   };
 }
 

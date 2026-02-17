@@ -43,6 +43,8 @@ describe('useForecastStore', () => {
     expect(forecast.prediction.condition).toBe(4);
     expect(forecast.prediction.confidence).toBe(70);
     expect(forecast.userId).toBe('user-1');
+    expect(forecast.experiment.plannedSuggestions).toEqual(['명상하기', '산책하기']);
+    expect(forecast.experiment.completionRate).toBe(0);
 
     const state = useForecastStore.getState();
     expect(state.forecasts).toHaveLength(1);
@@ -76,7 +78,9 @@ describe('useForecastStore', () => {
     useForecastStore.getState().recordActual(forecast.id, { condition: 4 });
 
     const updated = useForecastStore.getState().getForecastById(forecast.id);
-    expect(updated.actual).toEqual({ condition: 4 });
+    expect(updated.actual.condition).toBe(4);
+    expect(updated.actual.outcome).toBe('partial');
+    expect(Array.isArray(updated.actual.reasons)).toBe(true);
     expect(updated.accuracy).toBe(100); // Same condition = 100%
   });
 
@@ -135,6 +139,70 @@ describe('useForecastStore', () => {
     useForecastStore.getState().recordActual('nonexistent', { condition: 3 });
     // Should not throw
     expect(useForecastStore.getState().forecasts).toHaveLength(0);
+  });
+
+  it('should toggle action suggestion completion', async () => {
+    const forecast = await useForecastStore.getState().generateForecast({
+      userId: 'user-1',
+      recentDreams: [],
+      recentLogs: [],
+    });
+
+    useForecastStore.getState().toggleActionSuggestion(forecast.id, '명상하기');
+    let updated = useForecastStore.getState().getForecastById(forecast.id);
+    expect(updated.experiment.completedSuggestions).toEqual(['명상하기']);
+    expect(updated.experiment.completionRate).toBe(50);
+
+    useForecastStore.getState().toggleActionSuggestion(forecast.id, '명상하기');
+    updated = useForecastStore.getState().getForecastById(forecast.id);
+    expect(updated.experiment.completedSuggestions).toEqual([]);
+    expect(updated.experiment.completionRate).toBe(0);
+  });
+
+  it('should compute experiment summary and review stats', () => {
+    useForecastStore.setState({
+      forecasts: [
+        {
+          id: 'f1',
+          userId: 'user-1',
+          date: '2026-02-16',
+          prediction: { condition: 4, suggestions: ['명상하기', '산책하기'] },
+          actual: { condition: 4, outcome: 'hit', reasons: ['수면이 좋아서'] },
+          accuracy: 100,
+          experiment: {
+            plannedSuggestions: ['명상하기', '산책하기'],
+            completedSuggestions: ['명상하기', '산책하기'],
+            completionRate: 100,
+          },
+          createdAt: '2026-02-16T07:00:00.000Z',
+        },
+        {
+          id: 'f2',
+          userId: 'user-1',
+          date: '2026-02-15',
+          prediction: { condition: 4, suggestions: ['명상하기', '산책하기'] },
+          actual: { condition: 2, outcome: 'miss', reasons: ['수면이 부족해서'] },
+          accuracy: 50,
+          experiment: {
+            plannedSuggestions: ['명상하기', '산책하기'],
+            completedSuggestions: [],
+            completionRate: 0,
+          },
+          createdAt: '2026-02-15T07:00:00.000Z',
+        },
+      ],
+    });
+
+    const experimentSummary = useForecastStore.getState().getExperimentSummary('user-1', 30);
+    expect(experimentSummary.sampleSize).toBe(2);
+    expect(experimentSummary.highCompletionDays).toBe(1);
+    expect(experimentSummary.lowCompletionDays).toBe(1);
+    expect(experimentSummary.improvement).toBeGreaterThan(0);
+
+    const reviewStats = useForecastStore.getState().getReviewStats('user-1', 30);
+    expect(reviewStats.verifiedCount).toBe(2);
+    expect(reviewStats.hitCount).toBe(1);
+    expect(reviewStats.missCount).toBe(1);
   });
 
   it('should reset state', async () => {
