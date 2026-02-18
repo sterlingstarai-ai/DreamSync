@@ -233,4 +233,66 @@ describe('Dashboard', () => {
     fireEvent.click(screen.getByRole('button', { name: /호흡 10분/ }));
     expect(mockState.toggleCoachTask).toHaveBeenCalledWith('test-user', '2026-02-17', 'c1');
   });
+
+  it('shows recovery plan and appends recovery tasks to today plan', async () => {
+    mockState.checkedInToday = true;
+    mockState.todayDreams = [{ id: 'd1', content: '꿈', createdAt: '2026-02-17T07:00:00' }];
+    mockState.getWeeklyProgress.mockReturnValue({
+      goals: { checkInDays: 5, dreamCount: 4, avgSleepHours: 7 },
+      metrics: { checkInDays: 2, dreamCount: 1, avgSleepHours: 7 },
+      progress: {
+        checkInDays: { current: 2, target: 5, achieved: false },
+        dreamCount: { current: 1, target: 4, achieved: false },
+        avgSleepHours: { current: 7, target: 7, achieved: true },
+      },
+    });
+
+    renderDashboard();
+    expect(screen.getByText('주간 목표 복구 플랜')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: '오늘 플랜에 추가' }));
+    await waitFor(() => {
+      expect(mockState.upsertTodayCoachPlan).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = mockState.upsertTodayCoachPlan.mock.calls[0][0];
+    expect(payload.userId).toBe('test-user');
+    expect(payload.tasks.some(task => task.source === 'recovery')).toBe(true);
+  });
+
+  it('deduplicates recovery tasks already in today coach plan', async () => {
+    mockState.checkedInToday = false;
+    mockState.todayDreams = [];
+    mockState.coachPlan = {
+      date: '2026-02-17',
+      tasks: [
+        {
+          id: 'existing-checkin',
+          title: '오늘 저녁 체크인 완료하기',
+          source: 'goal',
+          estimatedMinutes: 3,
+          completed: false,
+        },
+      ],
+    };
+    mockState.getWeeklyProgress.mockReturnValue({
+      goals: { checkInDays: 5, dreamCount: 4, avgSleepHours: 7 },
+      metrics: { checkInDays: 2, dreamCount: 1, avgSleepHours: 7 },
+      progress: {
+        checkInDays: { current: 2, target: 5, achieved: false },
+        dreamCount: { current: 1, target: 4, achieved: false },
+        avgSleepHours: { current: 7, target: 7, achieved: true },
+      },
+    });
+
+    renderDashboard();
+    fireEvent.click(screen.getByRole('button', { name: '오늘 플랜에 추가' }));
+    await waitFor(() => {
+      expect(mockState.upsertTodayCoachPlan).toHaveBeenCalledTimes(1);
+    });
+
+    const payload = mockState.upsertTodayCoachPlan.mock.calls[0][0];
+    const checkInTasks = payload.tasks.filter(task => task.title === '오늘 저녁 체크인 완료하기');
+    expect(checkInTasks).toHaveLength(1);
+  });
 });

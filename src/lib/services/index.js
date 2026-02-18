@@ -10,3 +10,4 @@ export { default as reportService } from './reportService';
 export { default as symbolService } from './symbolService';
 export { default as b2bService } from './b2bService';
 export { default as coachPlanService } from './coachPlanService';
+export { default as goalRecoveryService } from './goalRecoveryService';

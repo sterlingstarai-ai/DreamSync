@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Moon, Sun, Sparkles, TrendingUp, Calendar,
-  ChevronRight, CheckCircle2, AlertTriangle, Search
+  ChevronRight, CheckCircle2, AlertTriangle, Search, Target
 } from 'lucide-react';
 import {
   PageContainer, Card, Button, Skeleton
@@ -26,6 +26,7 @@ import { formatFriendlyDate } from '../lib/utils/date';
 import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast';
 import { detectPatternAlerts } from '../lib/services/patternAlertService';
 import { buildCoachPlan, getCoachPlanCompletion } from '../lib/services/coachPlanService';
+import { buildGoalRecoveryPlan } from '../lib/services/goalRecoveryService';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -80,6 +81,14 @@ export default function Dashboard() {
     });
   }, [user, getWeeklyProgress, recentLogs, recentDreams]);
 
+  const recoveryPlan = useMemo(() => {
+    return buildGoalRecoveryPlan({
+      goalProgress,
+      checkedInToday,
+      todayDreamCount: todayDreams.length,
+    });
+  }, [goalProgress, checkedInToday, todayDreams.length]);
+
   const generatedCoachPlan = useMemo(() => {
     return buildCoachPlan({
       forecast: todayForecast?.prediction || null,
@@ -93,16 +102,39 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user?.id) return;
     if (generatedCoachPlan.tasks.length === 0) return;
+    if (todayCoachPlan?.tasks?.length > 0) return;
 
     upsertTodayCoachPlan({
       userId: user.id,
       tasks: generatedCoachPlan.tasks,
     });
-  }, [user, generatedCoachPlan, upsertTodayCoachPlan]);
+  }, [user, generatedCoachPlan, todayCoachPlan, upsertTodayCoachPlan]);
 
   const coachProgress = useMemo(() => {
     return getCoachPlanCompletion(todayCoachPlan?.tasks || []);
   }, [todayCoachPlan]);
+
+  const handleApplyRecoveryPlan = useCallback(() => {
+    if (!user?.id || !recoveryPlan.isNeeded || recoveryPlan.tasks.length === 0) return;
+
+    const mergedTasks = [
+      ...(todayCoachPlan?.tasks || []),
+      ...recoveryPlan.tasks,
+    ];
+    const used = new Set();
+    const uniqueTasks = mergedTasks.filter((task) => {
+      const key = String(task?.title || '').trim().toLowerCase();
+      if (!key || used.has(key)) return false;
+      used.add(key);
+      return true;
+    });
+
+    upsertTodayCoachPlan({
+      userId: user.id,
+      date: todayCoachPlan?.date,
+      tasks: uniqueTasks,
+    });
+  }, [user, recoveryPlan, todayCoachPlan, upsertTodayCoachPlan]);
 
   const handleToggleCoachTask = useCallback((taskId) => {
     if (!user?.id || !todayCoachPlan?.date) return;
@@ -168,6 +200,15 @@ export default function Dashboard() {
               plan={todayCoachPlan}
               progress={coachProgress}
               onToggleTask={handleToggleCoachTask}
+            />
+          </section>
+        )}
+
+        {recoveryPlan.isNeeded && (
+          <section className="mb-6">
+            <GoalRecoveryCard
+              plan={recoveryPlan}
+              onApply={handleApplyRecoveryPlan}
             />
           </section>
         )}
@@ -436,7 +477,50 @@ const COACH_SOURCE_LABELS = {
   alert: '회복',
   forecast: '예보',
   goal: '목표',
+  recovery: '복구',
 };
+
+const RECOVERY_RISK_STYLE = {
+  high: 'border-red-500/30 bg-red-500/10',
+  medium: 'border-amber-500/30 bg-amber-500/10',
+  low: 'border-emerald-500/30 bg-emerald-500/10',
+};
+
+function GoalRecoveryCard({ plan, onApply }) {
+  const riskStyle = RECOVERY_RISK_STYLE[plan.riskLevel] || RECOVERY_RISK_STYLE.low;
+
+  return (
+    <Card padding="lg" className={`border ${riskStyle}`}>
+      <div className="flex items-start justify-between gap-3 mb-3">
+        <div>
+          <h3 className="font-semibold text-[var(--text-primary)] flex items-center gap-2">
+            <Target className="w-4 h-4" />
+            주간 목표 복구 플랜
+          </h3>
+          <p className="text-sm text-[var(--text-secondary)] mt-1">
+            {plan.headline}
+          </p>
+        </div>
+        <span className="text-xs text-[var(--text-muted)] whitespace-nowrap">
+          남은 {plan.daysLeftInWeek}일
+        </span>
+      </div>
+
+      <div className="space-y-2 mb-3">
+        {plan.deficits.map((deficit) => (
+          <p key={deficit.key} className="text-xs text-[var(--text-secondary)]">
+            {deficit.label}: {deficit.current} / {deficit.target}
+            {' '}({deficit.gap}{deficit.unit || ''} 부족)
+          </p>
+        ))}
+      </div>
+
+      <Button size="sm" onClick={onApply}>
+        오늘 플랜에 추가
+      </Button>
+    </Card>
+  );
+}
 
 function CoachPlanCard({ plan, progress, onToggleTask }) {
   return (
