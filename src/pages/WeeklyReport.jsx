@@ -24,8 +24,20 @@ export default function WeeklyReport() {
   const navigate = useNavigate();
   const toast = useToast();
   const user = useAuthStore(state => state.user);
-  const { recentDreams, symbols, error: dreamError, clearError: clearDreamError } = useDreams();
-  const { recentLogs, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
+  const {
+    dreams,
+    recentDreams,
+    symbols,
+    error: dreamError,
+    clearError: clearDreamError,
+  } = useDreams();
+  const {
+    logs,
+    recentLogs,
+    stats: checkInStats,
+    error: checkInError,
+    clearError: clearCheckInError,
+  } = useCheckIn();
   const {
     stats: forecastStats,
     experimentSummary,
@@ -34,6 +46,8 @@ export default function WeeklyReport() {
   } = useForecast();
   const getWeeklyProgress = useGoalStore(state => state.getWeeklyProgress);
   const updateGoals = useGoalStore(state => state.updateGoals);
+  const getSuggestedGoals = useGoalStore(state => state.getSuggestedGoals);
+  const applySuggestedGoals = useGoalStore(state => state.applySuggestedGoals);
   const coachPlanStats = useCoachPlanStore((state) => {
     if (!user?.id) {
       return {
@@ -122,6 +136,27 @@ export default function WeeklyReport() {
       [goalKey]: next,
     });
   }, [user, goalProgress, updateGoals]);
+
+  const goalSuggestion = useMemo(() => {
+    if (!user?.id) return null;
+    return getSuggestedGoals(user.id, {
+      logs,
+      dreams,
+      lookbackDays: 14,
+    });
+  }, [user, getSuggestedGoals, logs, dreams]);
+
+  const applyRecommendedGoals = useCallback(() => {
+    if (!user?.id) return;
+    const applied = applySuggestedGoals(user.id, {
+      logs,
+      dreams,
+      lookbackDays: 14,
+    });
+    if (applied) {
+      toast.success('추천 목표를 적용했어요');
+    }
+  }, [user, logs, dreams, applySuggestedGoals, toast]);
 
   // 공유 텍스트 생성
   const buildShareText = useCallback(() => {
@@ -358,6 +393,27 @@ export default function WeeklyReport() {
                   onAdjust={adjustGoal}
                 />
               </div>
+
+              {goalSuggestion && (
+                <Card padding="md" className="mt-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                        추천 목표 ({goalSuggestion.confidence})
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        최근 {goalSuggestion.basis.lookbackDays}일 패턴 기반
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] mt-2">
+                        체크인 {goalSuggestion.suggested.checkInDays}일 · 꿈 {goalSuggestion.suggested.dreamCount}개 · 수면 {goalSuggestion.suggested.avgSleepHours}시간
+                      </p>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={applyRecommendedGoals}>
+                      추천 적용
+                    </Button>
+                  </div>
+                </Card>
+              )}
             </section>
 
             {/* 행동 실험 리포트 */}

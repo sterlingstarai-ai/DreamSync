@@ -9,8 +9,10 @@ import WeeklyReport from './WeeklyReport';
 const mockState = vi.hoisted(() => ({
   user: { id: 'user-1', name: '테스터', onboardingCompleted: true },
   recentDreams: [],
+  dreams: [],
   symbols: [],
   recentLogs: [],
+  logs: [],
   checkInStats: { completionRate: 0, averageCondition: 0, streak: 0 },
   forecastStats: { averageAccuracy: 0 },
   experimentSummary: {
@@ -23,6 +25,8 @@ const mockState = vi.hoisted(() => ({
   },
   getWeeklyProgress: vi.fn(),
   updateGoals: vi.fn(),
+  getSuggestedGoals: vi.fn(),
+  applySuggestedGoals: vi.fn(),
   coachPlansByUser: {},
   getRecentPlanStats: vi.fn(),
 }));
@@ -36,6 +40,7 @@ vi.mock('../store/useAuthStore', () => ({
 
 vi.mock('../hooks/useDreams', () => ({
   default: () => ({
+    dreams: mockState.dreams,
     recentDreams: mockState.recentDreams,
     symbols: mockState.symbols,
     error: null,
@@ -45,6 +50,7 @@ vi.mock('../hooks/useDreams', () => ({
 
 vi.mock('../hooks/useCheckIn', () => ({
   default: () => ({
+    logs: mockState.logs,
     recentLogs: mockState.recentLogs,
     stats: mockState.checkInStats,
     error: null,
@@ -66,12 +72,16 @@ vi.mock('../store/useGoalStore', () => {
     const state = {
       getWeeklyProgress: mockState.getWeeklyProgress,
       updateGoals: mockState.updateGoals,
+      getSuggestedGoals: mockState.getSuggestedGoals,
+      applySuggestedGoals: mockState.applySuggestedGoals,
     };
     return selector ? selector(state) : state;
   };
   store.getState = () => ({
     getWeeklyProgress: mockState.getWeeklyProgress,
     updateGoals: mockState.updateGoals,
+    getSuggestedGoals: mockState.getSuggestedGoals,
+    applySuggestedGoals: mockState.applySuggestedGoals,
   });
   return { default: store };
 });
@@ -134,6 +144,7 @@ describe('WeeklyReport', () => {
       { id: 'd3', date: '2026-02-15', content: '학교 꿈' },
       { id: 'd4', date: '2026-02-14', content: '집 꿈' },
     ];
+    mockState.dreams = [...mockState.recentDreams];
     mockState.symbols = [
       { name: '바다', count: 3 },
       { name: '숲', count: 2 },
@@ -143,6 +154,7 @@ describe('WeeklyReport', () => {
       { date: '2026-02-16', condition: 3, stressLevel: 3, emotions: ['happy'], sleep: { duration: 450 } },
       { date: '2026-02-15', condition: 4, stressLevel: 2, emotions: ['calm'], sleep: { duration: 420 } },
     ];
+    mockState.logs = [...mockState.recentLogs];
     mockState.checkInStats = { completionRate: 86, averageCondition: 3.7, streak: 3 };
     mockState.forecastStats = { averageAccuracy: 72 };
     mockState.experimentSummary = {
@@ -155,6 +167,8 @@ describe('WeeklyReport', () => {
     };
     mockState.getWeeklyProgress.mockReset();
     mockState.updateGoals.mockReset();
+    mockState.getSuggestedGoals.mockReset();
+    mockState.applySuggestedGoals.mockReset();
     mockState.getRecentPlanStats.mockReset();
     mockState.getWeeklyProgress.mockReturnValue({
       goals: {
@@ -173,6 +187,17 @@ describe('WeeklyReport', () => {
         avgSleepHours: { current: 7.5, target: 7, rate: 100, achieved: true },
       },
     });
+    mockState.getSuggestedGoals.mockReturnValue({
+      current: { checkInDays: 5, dreamCount: 4, avgSleepHours: 7 },
+      suggested: { checkInDays: 6, dreamCount: 5, avgSleepHours: 7.3 },
+      basis: { lookbackDays: 14 },
+      confidence: 'medium',
+    });
+    mockState.applySuggestedGoals.mockReturnValue({
+      checkInDays: 6,
+      dreamCount: 5,
+      avgSleepHours: 7.3,
+    });
     mockState.getRecentPlanStats.mockReturnValue({
       days: 7,
       activeDays: 3,
@@ -188,6 +213,7 @@ describe('WeeklyReport', () => {
     expect(screen.getByText('주간 코치 목표')).toBeInTheDocument();
     expect(screen.getByText('행동 실험 결과')).toBeInTheDocument();
     expect(screen.getByText('코치 플랜 이행률')).toBeInTheDocument();
+    expect(screen.getByText(/추천 목표/)).toBeInTheDocument();
     expect(screen.getByText('2/3 달성')).toBeInTheDocument();
     expect(screen.getByText(/추천 행동을 절반 이상 실천한 날/)).toBeInTheDocument();
     expect(screen.getByText('67%')).toBeInTheDocument();
@@ -205,6 +231,15 @@ describe('WeeklyReport', () => {
         dreamCount: 4,
         avgSleepHours: 7,
       }),
+    );
+  });
+
+  it('applies suggested goals when clicking recommendation button', () => {
+    renderWeeklyReport();
+    fireEvent.click(screen.getByText('추천 적용'));
+    expect(mockState.applySuggestedGoals).toHaveBeenCalledWith(
+      'user-1',
+      expect.objectContaining({ lookbackDays: 14 }),
     );
   });
 

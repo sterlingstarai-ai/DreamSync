@@ -23,6 +23,10 @@ function calcRate(current, target) {
   return Math.min(100, Math.round((current / target) * 100));
 }
 
+function clamp(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 const useGoalStore = create(
   persist(
     (set, get) => ({
@@ -116,6 +120,85 @@ const useGoalStore = create(
             },
           },
         };
+      },
+
+      /**
+       * 최근 데이터 기반 추천 주간 목표 계산
+       * @param {string} userId
+       * @param {Object} params
+       * @param {Array} [params.logs=[]]
+       * @param {Array} [params.dreams=[]]
+       * @param {number} [params.lookbackDays=14]
+       */
+      getSuggestedGoals: (userId, { logs = [], dreams = [], lookbackDays = 14 } = {}) => {
+        const goals = get().getGoals(userId);
+        const recentDays = new Set(getRecentDays(lookbackDays));
+
+        const recentLogs = logs.filter(log => recentDays.has(log.date));
+        const recentDreams = dreams.filter((dream) => {
+          const dreamDate = dream.date || (dream.createdAt || '').split('T')[0];
+          return recentDays.has(dreamDate);
+        });
+
+        const checkInDays = new Set(recentLogs.map(log => log.date)).size;
+        const dreamCount = recentDreams.length;
+        const sleepHoursList = recentLogs
+          .filter(log => typeof log.sleep?.duration === 'number')
+          .map(log => log.sleep.duration / 60);
+        const avgSleepHours = sleepHoursList.length > 0
+          ? sleepHoursList.reduce((sum, hour) => sum + hour, 0) / sleepHoursList.length
+          : 0;
+
+        const weeklyCheckInAvg = Math.round((checkInDays / lookbackDays) * 7);
+        const weeklyDreamAvg = Math.round((dreamCount / lookbackDays) * 7);
+        const roundedSleep = Math.round((avgSleepHours || goals.avgSleepHours) * 10) / 10;
+
+        const suggested = {
+          checkInDays: clamp(
+            weeklyCheckInAvg >= goals.checkInDays ? weeklyCheckInAvg + 1 : weeklyCheckInAvg,
+            3,
+            7,
+          ),
+          dreamCount: clamp(
+            weeklyDreamAvg >= goals.dreamCount ? weeklyDreamAvg + 1 : weeklyDreamAvg,
+            2,
+            7,
+          ),
+          avgSleepHours: clamp(
+            Math.round((roundedSleep + 0.3) * 10) / 10,
+            6,
+            9,
+          ),
+        };
+
+        const dataCount = recentLogs.length + recentDreams.length;
+        const confidence = dataCount >= 10 ? 'high' : dataCount >= 5 ? 'medium' : 'low';
+
+        return {
+          current: goals,
+          suggested,
+          basis: {
+            lookbackDays,
+            checkInDays,
+            dreamCount,
+            avgSleepHours: Math.round(roundedSleep * 10) / 10,
+            weeklyCheckInAvg,
+            weeklyDreamAvg,
+          },
+          confidence,
+        };
+      },
+
+      /**
+       * 추천 목표 즉시 적용
+       * @param {string} userId
+       * @param {Object} params
+       */
+      applySuggestedGoals: (userId, params = {}) => {
+        if (!userId) return null;
+        const result = get().getSuggestedGoals(userId, params);
+        get().updateGoals(userId, result.suggested);
+        return result.suggested;
       },
 
       reset: () => {
