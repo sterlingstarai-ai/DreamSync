@@ -6,6 +6,7 @@ import { Moon, Sparkles, Check, ChevronRight, Bell } from 'lucide-react';
 import { Button } from '../components/common';
 import useAuth from '../hooks/useAuth';
 import useNotifications from '../hooks/useNotifications';
+import useSettingsStore from '../store/useSettingsStore';
 import { loadSampleData } from '../lib/utils/sampleData';
 
 const STEPS = [
@@ -36,6 +37,7 @@ const STEPS = [
 export default function Onboarding() {
   const { user, completeOnboarding } = useAuth();
   const { requestPermission, scheduleMorningReminder, scheduleEveningReminder, scheduleWeeklyReportReminder } = useNotifications();
+  const updateNotifications = useSettingsStore(state => state.updateNotifications);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
@@ -62,8 +64,19 @@ export default function Onboarding() {
       await scheduleMorningReminder('07:00');
       await scheduleEveningReminder('21:00');
       await scheduleWeeklyReportReminder();
+      updateNotifications({
+        enabled: true,
+        morningReminder: true,
+        morningTime: '07:00',
+        eveningReminder: true,
+        eveningTime: '21:00',
+        weeklyReport: true,
+      });
       setNotificationEnabled(true);
+      return;
     }
+
+    updateNotifications({ enabled: false });
   };
 
   const Icon = step.icon;

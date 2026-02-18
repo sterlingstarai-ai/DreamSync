@@ -14,6 +14,7 @@ const NOTIFICATION_IDS = {
   MORNING_REMINDER: 1,
   EVENING_REMINDER: 2,
   WEEKLY_REPORT: 3,
+  TEST_NOTIFICATION: 9000,
 };
 
 /**
@@ -224,6 +225,43 @@ export default function useNotifications() {
   }, []);
 
   /**
+   * 테스트 알림 예약
+   * @param {number} [delayMinutes=1]
+   */
+  const scheduleTestNotification = useCallback(async (delayMinutes = 1) => {
+    if (!Capacitor.isNativePlatform()) return false;
+
+    if (!hasPermission) {
+      const granted = await requestPermission();
+      if (!granted) return false;
+    }
+
+    try {
+      const at = new Date(Date.now() + Math.max(1, delayMinutes) * 60 * 1000);
+
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: NOTIFICATION_IDS.TEST_NOTIFICATION,
+            title: 'DreamSync 테스트 알림',
+            body: '알림 설정이 정상적으로 동작하고 있어요.',
+            schedule: {
+              at,
+              allowWhileIdle: true,
+            },
+            sound: 'default',
+            actionTypeId: 'TEST_NOTIFICATION',
+          },
+        ],
+      });
+      return true;
+    } catch (error) {
+      logger.error('Failed to schedule test notification:', error);
+      return false;
+    }
+  }, [hasPermission, requestPermission]);
+
+  /**
    * 알림 설정 일괄 적용
    * @param {Object} settings
    */
@@ -278,6 +316,7 @@ export default function useNotifications() {
     scheduleWeeklyReportReminder,
     cancelNotification,
     cancelAllNotifications,
+    scheduleTestNotification,
     applyNotificationSettings,
 
     // 상수

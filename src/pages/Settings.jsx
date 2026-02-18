@@ -1,11 +1,11 @@
 /**
  * 설정 페이지
  */
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   User, Bell, Moon, Shield, Info, LogOut, ChevronRight,
   Smartphone, Heart, Database, Code, ToggleLeft, ToggleRight,
-  Download, Trash2
+  Download, Trash2, Sunrise, Clock3
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -35,7 +35,12 @@ export default function Settings() {
   const getAllSettings = useSettingsStore(state => state.getAllSettings);
   const resetSettings = useSettingsStore(state => state.resetSettings);
   const { isEnabled, toggleFlag, getAvailableFlags, isNative, isIOS, isAndroid } = useFeatureFlags();
-  const { hasPermission, requestPermission, applyNotificationSettings } = useNotifications();
+  const {
+    hasPermission,
+    requestPermission,
+    applyNotificationSettings,
+    scheduleTestNotification,
+  } = useNotifications();
 
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showDevMode, setShowDevMode] = useState(false);
@@ -84,6 +89,14 @@ export default function Settings() {
     toast.success('모든 데이터가 삭제되었습니다');
   };
 
+  const applyNotificationChanges = useCallback(async (partial, shouldSync = notifications.enabled) => {
+    const next = { ...notifications, ...partial };
+    updateNotifications(partial);
+    if (shouldSync) {
+      await applyNotificationSettings(next);
+    }
+  }, [notifications, updateNotifications, applyNotificationSettings]);
+
   const handleNotificationToggle = async (enabled) => {
     if (enabled && !hasPermission) {
       const granted = await requestPermission();
@@ -92,8 +105,28 @@ export default function Settings() {
         return;
       }
     }
-    updateNotifications({ enabled });
-    await applyNotificationSettings({ ...notifications, enabled });
+    await applyNotificationChanges({ enabled }, true);
+  };
+
+  const handleReminderToggle = async (key, enabled) => {
+    const shouldSync = notifications.enabled;
+    await applyNotificationChanges({ [key]: enabled }, shouldSync);
+  };
+
+  const handleReminderTimeChange = async (key, value) => {
+    const isValidTime = /^\d{2}:\d{2}$/.test(value);
+    if (!isValidTime) return;
+    const shouldSync = notifications.enabled;
+    await applyNotificationChanges({ [key]: value }, shouldSync);
+  };
+
+  const handleTestNotification = async () => {
+    const ok = await scheduleTestNotification(1);
+    if (ok) {
+      toast.success('1분 후 테스트 알림이 예약되었습니다');
+    } else {
+      toast.warning('테스트 알림을 보낼 수 없습니다');
+    }
   };
 
   return (
@@ -133,16 +166,58 @@ export default function Settings() {
             />
             {notifications.enabled && (
               <>
-                <SettingItem
-                  icon={Moon}
-                  label="아침 알림"
-                  value={notifications.morningTime}
+                <SettingToggle
+                  icon={Sunrise}
+                  label="아침 꿈 기록 알림"
+                  description="기상 후 꿈 기록 리마인더"
+                  enabled={notifications.morningReminder}
+                  onChange={(enabled) => handleReminderToggle('morningReminder', enabled)}
                 />
-                <SettingItem
+                {notifications.morningReminder && (
+                  <SettingTimeInput
+                    icon={Clock3}
+                    label="아침 알림 시간"
+                    value={notifications.morningTime}
+                    onChange={(value) => handleReminderTimeChange('morningTime', value)}
+                  />
+                )}
+
+                <SettingToggle
                   icon={Moon}
-                  label="저녁 알림"
-                  value={notifications.eveningTime}
+                  label="저녁 체크인 알림"
+                  description="하루 마무리 체크인 리마인더"
+                  enabled={notifications.eveningReminder}
+                  onChange={(enabled) => handleReminderToggle('eveningReminder', enabled)}
                 />
+                {notifications.eveningReminder && (
+                  <SettingTimeInput
+                    icon={Clock3}
+                    label="저녁 알림 시간"
+                    value={notifications.eveningTime}
+                    onChange={(value) => handleReminderTimeChange('eveningTime', value)}
+                  />
+                )}
+
+                <SettingToggle
+                  icon={Bell}
+                  label="주간 리포트 알림"
+                  description="매주 일요일 오전 리포트 알림"
+                  enabled={notifications.weeklyReport}
+                  onChange={(enabled) => handleReminderToggle('weeklyReport', enabled)}
+                />
+
+                {isNative && (
+                  <SettingItem
+                    icon={Bell}
+                    label="테스트 알림 보내기"
+                    value="1분 후"
+                    onClick={handleTestNotification}
+                  />
+                )}
+
+                <div className="px-4 py-2 text-xs text-[var(--text-muted)]">
+                  알림 권한: {hasPermission ? '허용됨' : '미허용'}
+                </div>
               </>
             )}
           </SettingSection>
@@ -413,6 +488,22 @@ function SettingToggle({ icon: ToggleIcon, label, description, enabled, onChange
           <ToggleLeft className="w-8 h-8 text-[var(--text-muted)]" />
         )}
       </button>
+    </div>
+  );
+}
+
+function SettingTimeInput({ icon: TimeIcon, label, value, onChange }) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-3">
+      <TimeIcon className="w-5 h-5 text-[var(--text-muted)]" />
+      <span className="flex-1 text-[var(--text-primary)]">{label}</span>
+      <input
+        aria-label={label}
+        type="time"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="px-2.5 py-1.5 rounded-lg bg-[var(--bg-tertiary)] text-[var(--text-primary)] border border-[var(--border-color)] text-sm"
+      />
     </div>
   );
 }
