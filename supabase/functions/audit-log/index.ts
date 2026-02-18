@@ -80,8 +80,15 @@ function validateAuditEntry(data: Record<string, unknown>): string | null {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Audit-Log-Secret',
 };
+
+function hasValidSharedSecret(req: Request): boolean {
+  const expected = Deno.env.get('AUDIT_LOG_SHARED_SECRET');
+  if (!expected) return true;
+  const received = req.headers.get('X-Audit-Log-Secret');
+  return received === expected;
+}
 
 Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
@@ -91,6 +98,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST only' }), {
       status: 405,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!hasValidSharedSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }

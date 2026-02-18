@@ -46,7 +46,7 @@ describe('RemoteFlagsAdapter', () => {
     await RemoteFlagsAdapter.getFlags('user-789');
 
     expect(storage.set).toHaveBeenCalledWith(
-      'remote_flags',
+      'remote_flags:user-789',
       expect.objectContaining({
         flags: expect.any(Object),
         timestamp: expect.any(Number),
@@ -65,8 +65,8 @@ describe('RemoteFlagsAdapter', () => {
   });
 
   it('clearCache → storage.remove 호출', async () => {
-    await RemoteFlagsAdapter.clearCache();
-    expect(storage.remove).toHaveBeenCalledWith('remote_flags');
+    await RemoteFlagsAdapter.clearCache('user-001');
+    expect(storage.remove).toHaveBeenCalledWith('remote_flags:user-001');
   });
 
   it('isEnabled → DEFAULT_FLAGS에서 값 반환', async () => {

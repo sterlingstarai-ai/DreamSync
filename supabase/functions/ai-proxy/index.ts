@@ -18,21 +18,50 @@ import type { AIProxyResponse, DreamAnalysis, ForecastPrediction } from './schem
 
 // ─── CORS ──────────────────────────────────────────
 
-const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+const BASE_CORS_HEADERS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Rate-Limit-Secret, X-Audit-Log-Secret',
   'Access-Control-Max-Age': '86400',
 };
 
-function corsResponse(status = 204): Response {
-  return new Response(null, { status, headers: CORS_HEADERS });
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '')
+  .split(',')
+  .map(v => v.trim())
+  .filter(Boolean);
+
+function getCorsHeaders(origin: string | null): HeadersInit {
+  if (ALLOWED_ORIGINS.length === 0) {
+    return {
+      ...BASE_CORS_HEADERS,
+      'Access-Control-Allow-Origin': '*',
+    };
+  }
+  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+    return {
+      ...BASE_CORS_HEADERS,
+      'Access-Control-Allow-Origin': origin,
+      'Vary': 'Origin',
+    };
+  }
+  return {
+    ...BASE_CORS_HEADERS,
+    'Access-Control-Allow-Origin': 'null',
+    'Vary': 'Origin',
+  };
 }
 
-function jsonResponse<T>(body: AIProxyResponse<T>, status = 200): Response {
+function corsResponse(origin: string | null, status = 204): Response {
+  return new Response(null, { status, headers: getCorsHeaders(origin) });
+}
+
+function jsonResponse<T>(
+  body: AIProxyResponse<T>,
+  status = 200,
+  origin: string | null = null,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    headers: { ...getCorsHeaders(origin), 'Content-Type': 'application/json' },
   });
 }
 
@@ -40,6 +69,55 @@ function jsonResponse<T>(body: AIProxyResponse<T>, status = 200): Response {
 
 function generateRequestId(): string {
   return `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+async function resolveUserId(authHeader: string): Promise<string | null> {
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  if (!token) return null;
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') || Deno.env.get('VITE_SUPABASE_URL');
+  const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') || Deno.env.get('VITE_SUPABASE_ANON_KEY');
+  if (!supabaseUrl || !supabaseAnonKey) return null;
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        'apikey': supabaseAnonKey,
+        'Authorization': `Bearer ${token}`,
+      },
+    });
+    if (!response.ok) return null;
+
+    const user = await response.json().catch(() => null);
+    return typeof user?.id === 'string' ? user.id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function checkRateLimit(userId: string, authHeader: string): Promise<{ allowed: boolean; payload?: any }> {
+  const rateLimitUrl = Deno.env.get('RATE_LIMIT_URL');
+  if (!rateLimitUrl) return { allowed: true };
+
+  const sharedSecret = Deno.env.get('RATE_LIMIT_SHARED_SECRET');
+  const response = await fetch(rateLimitUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(sharedSecret ? { 'X-Rate-Limit-Secret': sharedSecret } : {}),
+      Authorization: authHeader,
+    },
+    body: JSON.stringify({ userId }),
+  });
+
+  const payload = await response.json().catch(() => null);
+  if (response.status === 429) {
+    return { allowed: false, payload };
+  }
+  if (!response.ok) {
+    throw new Error('Rate limit service unavailable');
+  }
+  return { allowed: true, payload };
 }
 
 // ─── 스텁 핸들러 (Phase 2에서 실제 LLM 호출로 교체) ──────
@@ -93,10 +171,14 @@ async function fireAuditLog(meta: {
   try {
     const auditUrl = Deno.env.get('AUDIT_LOG_URL');
     if (!auditUrl) return;
+    const auditSecret = Deno.env.get('AUDIT_LOG_SHARED_SECRET');
 
     await fetch(auditUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(auditSecret ? { 'X-Audit-Log-Secret': auditSecret } : {}),
+      },
       body: JSON.stringify({ ...meta, timestamp: new Date().toISOString() }),
     });
   } catch {
@@ -115,15 +197,26 @@ async function simpleHash(text: string): Promise<string> {
 // ─── 메인 핸들러 ────────────────────────────────────
 
 Deno.serve(async (req: Request): Promise<Response> => {
+  const origin = req.headers.get('Origin');
+
+  if (ALLOWED_ORIGINS.length > 0 && origin && !ALLOWED_ORIGINS.includes(origin)) {
+    return jsonResponse(
+      { success: false, error: { code: 'CORS_FORBIDDEN', message: 'Origin is not allowed' }, meta: { requestId: generateRequestId(), latencyMs: 0 } },
+      403,
+      origin,
+    );
+  }
+
   // CORS preflight
   if (req.method === 'OPTIONS') {
-    return corsResponse();
+    return corsResponse(origin);
   }
 
   if (req.method !== 'POST') {
     return jsonResponse(
       { success: false, error: { code: 'METHOD_NOT_ALLOWED', message: 'POST only' }, meta: { requestId: generateRequestId(), latencyMs: 0 } },
       405,
+      origin,
     );
   }
 
@@ -131,12 +224,21 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const start = performance.now();
 
   try {
-    // Authorization 확인 (JWT 검증은 TODO)
+    // Authorization + JWT 검증
     const authHeader = req.headers.get('Authorization');
     if (!authHeader?.startsWith('Bearer ')) {
       return jsonResponse(
         { success: false, error: { code: 'AUTH_REQUIRED', message: 'Bearer token required' }, meta: { requestId, latencyMs: performance.now() - start } },
         401,
+        origin,
+      );
+    }
+    const userId = await resolveUserId(authHeader);
+    if (!userId) {
+      return jsonResponse(
+        { success: false, error: { code: 'AUTH_INVALID', message: 'Invalid or expired token' }, meta: { requestId, latencyMs: performance.now() - start } },
+        401,
+        origin,
       );
     }
 
@@ -147,13 +249,18 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return jsonResponse(
         { success: false, error: { code: 'VALIDATION_ERROR', message: 'type and payload required' }, meta: { requestId, latencyMs: performance.now() - start } },
         400,
+        origin,
       );
     }
 
-    // TODO: rate-limit 호출
-    // const rateLimitUrl = Deno.env.get('RATE_LIMIT_URL');
-
-    const userId = 'anonymous'; // TODO: JWT에서 추출
+    const rateLimit = await checkRateLimit(userId, authHeader);
+    if (!rateLimit.allowed) {
+      return jsonResponse(
+        { success: false, error: { code: 'AI_RATE_LIMIT', message: 'Too many requests' }, meta: { requestId, latencyMs: performance.now() - start } },
+        429,
+        origin,
+      );
+    }
 
     let data: unknown;
     let contentForHash = '';
@@ -164,6 +271,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return jsonResponse(
           { success: false, error: { code: 'VALIDATION_ERROR', message: validation.error }, meta: { requestId, latencyMs: performance.now() - start } },
           400,
+          origin,
         );
       }
       contentForHash = payload.content;
@@ -173,6 +281,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return jsonResponse(
           { success: false, error: { code: 'AI_PARSE_ERROR', message: responseValidation.error }, meta: { requestId, latencyMs: performance.now() - start } },
           500,
+          origin,
         );
       }
     } else if (type === 'generateForecast') {
@@ -181,6 +290,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return jsonResponse(
           { success: false, error: { code: 'VALIDATION_ERROR', message: validation.error }, meta: { requestId, latencyMs: performance.now() - start } },
           400,
+          origin,
         );
       }
       contentForHash = JSON.stringify(payload);
@@ -190,12 +300,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
         return jsonResponse(
           { success: false, error: { code: 'AI_PARSE_ERROR', message: responseValidation.error }, meta: { requestId, latencyMs: performance.now() - start } },
           500,
+          origin,
         );
       }
     } else {
       return jsonResponse(
         { success: false, error: { code: 'VALIDATION_ERROR', message: `Unknown type: ${type}` }, meta: { requestId, latencyMs: performance.now() - start } },
         400,
+        origin,
       );
     }
 
@@ -211,13 +323,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
       success: true,
     });
 
-    return jsonResponse({ success: true, data, meta: { requestId, latencyMs } });
+    return jsonResponse({ success: true, data, meta: { requestId, latencyMs } }, 200, origin);
   } catch (err) {
     const latencyMs = Math.round(performance.now() - start);
     const message = err instanceof Error ? err.message : 'Internal server error';
     return jsonResponse(
       { success: false, error: { code: 'SERVER_ERROR', message }, meta: { requestId, latencyMs } },
       500,
+      origin,
     );
   }
 });

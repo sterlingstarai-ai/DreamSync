@@ -10,17 +10,21 @@ import storage from '../adapters/storage';
 
 const QUEUE_KEY = 'sync_queue';
 
-/** @type {{ items: Array, isOnline: boolean, listeners: Set }} */
+/** @type {{ items: Array, isOnline: boolean, listeners: Set<Function>, initialized: boolean, networkListener: any }} */
 const state = {
   items: [],
   isOnline: true,
   listeners: new Set(),
+  initialized: false,
+  networkListener: null,
 };
 
 /**
  * 큐 초기화 - 앱 시작 시 호출
  */
 export async function initSyncQueue() {
+  if (state.initialized) return;
+
   // 저장된 큐 로드
   const saved = await storage.get(QUEUE_KEY);
   if (Array.isArray(saved)) {
@@ -36,7 +40,7 @@ export async function initSyncQueue() {
     await flush();
   }
 
-  Network.addListener('networkStatusChange', async (newStatus) => {
+  state.networkListener = await Network.addListener('networkStatusChange', async (newStatus) => {
     const wasOffline = !state.isOnline;
     state.isOnline = newStatus.connected;
 
@@ -47,6 +51,19 @@ export async function initSyncQueue() {
 
     notify();
   });
+
+  state.initialized = true;
+}
+
+/**
+ * 큐 정리 - 앱 종료/재초기화 시 리스너 해제
+ */
+export async function disposeSyncQueue() {
+  if (state.networkListener && typeof state.networkListener.remove === 'function') {
+    await state.networkListener.remove();
+  }
+  state.networkListener = null;
+  state.initialized = false;
 }
 
 /**

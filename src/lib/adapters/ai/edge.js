@@ -28,8 +28,13 @@ let fallbackCount = 0;
 
 async function getAuthToken() {
   try {
-    const data = await storage.get('dreamsync-auth');
-    return data?.state?.token || null;
+    const primary = await storage.get('auth');
+    if (primary?.state?.token) return primary.state.token;
+    if (primary?.token) return primary.token;
+
+    // 레거시 키 호환
+    const legacy = await storage.get('dreamsync-auth');
+    return legacy?.state?.token || legacy?.token || null;
   } catch {
     return null;
   }
@@ -52,6 +57,9 @@ async function callEdgeFunction(type, payload) {
   }
 
   const token = await getAuthToken();
+  if (!token) {
+    throw new AppError('로그인이 필요합니다.', ERROR_CODES.AUTH_REQUIRED);
+  }
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
@@ -74,6 +82,12 @@ async function callEdgeFunction(type, payload) {
         '요청 한도를 초과했습니다. 잠시 후 다시 시도해주세요.',
         ERROR_CODES.AI_RATE_LIMIT,
       );
+    }
+    if (response.status === 401) {
+      throw new AppError('로그인이 필요합니다.', ERROR_CODES.AUTH_REQUIRED);
+    }
+    if (response.status === 403) {
+      throw new AppError('인증 정보가 올바르지 않습니다.', ERROR_CODES.AUTH_INVALID);
     }
 
     if (!response.ok) {
@@ -100,7 +114,11 @@ async function callEdgeFunction(type, payload) {
     clearTimeout(timeoutId);
 
     // rate limit은 fallback 안 함
-    if (err instanceof AppError && err.code === ERROR_CODES.AI_RATE_LIMIT) {
+    if (err instanceof AppError && [
+      ERROR_CODES.AI_RATE_LIMIT,
+      ERROR_CODES.AUTH_REQUIRED,
+      ERROR_CODES.AUTH_INVALID,
+    ].includes(err.code)) {
       throw err;
     }
 

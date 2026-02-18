@@ -101,7 +101,17 @@ const useFeatureFlagStore = create(
        * @param {string} key
        */
       toggleFlag: (key) => {
-        const { flags, getFlag } = get();
+        const { flags, getFlag, platform } = get();
+
+        if (!(key in DEFAULT_FEATURE_FLAGS)) {
+          logger.warn(`Unknown flag key: "${key}"`);
+          return;
+        }
+        if (!isFlagAvailable(key, platform)) {
+          logger.warn(`Flag "${key}" is not available on ${platform}`);
+          return;
+        }
+
         const currentValue = getFlag(key);
         const nextValue = !currentValue;
 

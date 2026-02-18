@@ -19,6 +19,7 @@ describe('useAuthStore', () => {
   it('should sign up a new user', async () => {
     const result = await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
       name: 'Test User',
     });
 
@@ -34,6 +35,7 @@ describe('useAuthStore', () => {
   it('should use email prefix as name when name not provided', async () => {
     const result = await useAuthStore.getState().signUp({
       email: 'john@example.com',
+      password: 'password123',
     });
 
     expect(result.user.name).toBe('john');
@@ -43,6 +45,7 @@ describe('useAuthStore', () => {
     // First sign up
     await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
       name: 'Test',
     });
 
@@ -53,6 +56,7 @@ describe('useAuthStore', () => {
     // Sign in with same email
     const result = await useAuthStore.getState().signIn({
       email: 'test@example.com',
+      password: 'password123',
     });
 
     expect(result.success).toBe(true);
@@ -63,6 +67,7 @@ describe('useAuthStore', () => {
   it('should sign out', async () => {
     await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
     });
 
     const result = await useAuthStore.getState().signOut();
@@ -75,6 +80,7 @@ describe('useAuthStore', () => {
   it('should update user info', async () => {
     await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
       name: 'Old Name',
     });
 
@@ -90,6 +96,7 @@ describe('useAuthStore', () => {
   it('should update settings', async () => {
     await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
     });
 
     useAuthStore.getState().updateSettings({ theme: 'light' });
@@ -101,6 +108,7 @@ describe('useAuthStore', () => {
   it('should complete onboarding', async () => {
     await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
     });
 
     expect(useAuthStore.getState().user.onboardingCompleted).toBe(false);
@@ -112,12 +120,14 @@ describe('useAuthStore', () => {
   it('should generate unique user IDs', async () => {
     const result1 = await useAuthStore.getState().signUp({
       email: 'user1@example.com',
+      password: 'password123',
     });
 
     useAuthStore.getState().reset();
 
     const result2 = await useAuthStore.getState().signUp({
       email: 'user2@example.com',
+      password: 'password123',
     });
 
     expect(result1.user.id).not.toBe(result2.user.id);
@@ -126,11 +136,28 @@ describe('useAuthStore', () => {
   it('should reset state', async () => {
     await useAuthStore.getState().signUp({
       email: 'test@example.com',
+      password: 'password123',
     });
 
     useAuthStore.getState().reset();
     const state = useAuthStore.getState();
     expect(state.user).toBeNull();
     expect(state.isAuthenticated).toBe(false);
+  });
+
+  it('should fail sign in with wrong password', async () => {
+    await useAuthStore.getState().signUp({
+      email: 'test@example.com',
+      password: 'password123',
+    });
+    await useAuthStore.getState().signOut();
+
+    const result = await useAuthStore.getState().signIn({
+      email: 'test@example.com',
+      password: 'wrong-password',
+    });
+
+    expect(result.success).toBe(false);
+    expect(useAuthStore.getState().isAuthenticated).toBe(false);
   });
 });

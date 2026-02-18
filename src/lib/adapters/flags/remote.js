@@ -11,11 +11,30 @@ import { DEFAULT_FLAGS } from '../../../constants/featureFlags';
 import logger from '../../utils/logger';
 import storage from '../storage';
 
-const CACHE_KEY = 'remote_flags';
 const CACHE_TTL = 5 * 60 * 1000; // 5분
+const REQUEST_TIMEOUT_MS = 5000;
+const MAX_RETRIES = 1;
+const RETRY_DELAY_MS = 250;
 
-let cachedFlags = null;
-let cacheTimestamp = 0;
+const memoryCache = new Map();
+
+function toUserKey(userId) {
+  return String(userId || 'anonymous');
+}
+
+function cacheKey(userId) {
+  return `remote_flags:${toUserKey(userId)}`;
+}
+
+async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 /**
  * 원격 플래그 가져오기
@@ -29,58 +48,71 @@ async function fetchRemoteFlags(userId) {
     return DEFAULT_FLAGS;
   }
 
-  try {
-    // TODO: Phase 2 — RLS 적용 후 user_id 쿼리 제거, JWT에서 자동 필터링
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/feature_flags?select=*`,
-      {
-        headers: {
-          'apikey': supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
-          'x-user-id': userId,
+  let lastError = null;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // TODO: Phase 2 — RLS 적용 후 user_id 쿼리 제거, JWT에서 자동 필터링
+      const query = userId
+        ? `?select=*&user_id=eq.${encodeURIComponent(userId)}`
+        : '?select=*';
+      const response = await fetchWithTimeout(
+        `${supabaseUrl}/rest/v1/feature_flags${query}`,
+        {
+          headers: {
+            'apikey': supabaseKey,
+            'Authorization': `Bearer ${supabaseKey}`,
+            ...(userId ? { 'x-user-id': userId } : {}),
+          },
         },
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-    );
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      const data = await response.json();
+
+      if (data && data.length > 0) {
+        return {
+          ...DEFAULT_FLAGS,
+          ...data[0].flags,
+        };
+      }
+
+      return DEFAULT_FLAGS;
+    } catch (error) {
+      lastError = error;
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * (attempt + 1)));
+        continue;
+      }
     }
-
-    const data = await response.json();
-
-    if (data && data.length > 0) {
-      return {
-        ...DEFAULT_FLAGS,
-        ...data[0].flags,
-      };
-    }
-
-    return DEFAULT_FLAGS;
-  } catch (error) {
-    logger.error('[RemoteFlags] Fetch failed:', error);
-    return DEFAULT_FLAGS;
   }
+
+  logger.error('[RemoteFlags] Fetch failed:', lastError);
+  return DEFAULT_FLAGS;
 }
 
 /**
  * 플래그 가져오기 (캐시 사용)
  */
 async function getFlags(userId) {
+  const key = toUserKey(userId);
   const now = Date.now();
 
   // 메모리 캐시 유효성 확인
-  if (cachedFlags && (now - cacheTimestamp) < CACHE_TTL) {
-    return cachedFlags;
+  const memory = memoryCache.get(key);
+  if (memory && (now - memory.timestamp) < CACHE_TTL) {
+    return memory.flags;
   }
 
   // Preferences 캐시 확인
   try {
-    const localCache = await storage.get(CACHE_KEY);
+    const localCache = await storage.get(cacheKey(userId));
     if (localCache) {
       const { flags, timestamp } = localCache;
       if ((now - timestamp) < CACHE_TTL) {
-        cachedFlags = flags;
-        cacheTimestamp = timestamp;
+        memoryCache.set(key, { flags, timestamp });
         return flags;
       }
     }
@@ -92,11 +124,10 @@ async function getFlags(userId) {
   const flags = await fetchRemoteFlags(userId);
 
   // 캐시 업데이트
-  cachedFlags = flags;
-  cacheTimestamp = now;
+  memoryCache.set(key, { flags, timestamp: now });
 
   try {
-    await storage.set(CACHE_KEY, { flags, timestamp: now });
+    await storage.set(cacheKey(userId), { flags, timestamp: now });
   } catch {
     // 캐시 저장 실패 무시
   }
@@ -116,6 +147,11 @@ async function isEnabled(userId, flagName) {
  * 플래그 업데이트 (서버에)
  */
 async function updateFlag(userId, flagName, value) {
+  if (!userId) {
+    logger.warn('[RemoteFlags] Cannot update without userId');
+    return false;
+  }
+
   const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
   const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
@@ -154,9 +190,8 @@ async function updateFlag(userId, flagName, value) {
     }
 
     // 캐시 무효화
-    cachedFlags = null;
-    cacheTimestamp = 0;
-    await storage.remove(CACHE_KEY);
+    memoryCache.delete(toUserKey(userId));
+    await storage.remove(cacheKey(userId));
 
     return true;
   } catch (error) {
@@ -168,18 +203,29 @@ async function updateFlag(userId, flagName, value) {
 /**
  * 캐시 클리어
  */
-async function clearCache() {
-  cachedFlags = null;
-  cacheTimestamp = 0;
-  await storage.remove(CACHE_KEY);
+async function clearCache(userId) {
+  if (userId) {
+    memoryCache.delete(toUserKey(userId));
+    await storage.remove(cacheKey(userId));
+    return;
+  }
+
+  memoryCache.clear();
+  if (typeof storage.keys === 'function') {
+    const keys = await storage.keys();
+    const target = keys.filter(key => key.startsWith('remote_flags:'));
+    await Promise.all(target.map(key => storage.remove(key)));
+  } else {
+    await storage.remove(cacheKey());
+    await storage.remove('remote_flags'); // 레거시 키 정리
+  }
 }
 
 /**
  * 내부 상태 리셋 (테스트용)
  */
 function _resetForTest() {
-  cachedFlags = null;
-  cacheTimestamp = 0;
+  memoryCache.clear();
 }
 
 export const RemoteFlagsAdapter = {

@@ -10,6 +10,7 @@ import Login from './Login';
 vi.mock('../../hooks/useAuth', () => ({
   default: () => ({
     signIn: vi.fn().mockResolvedValue({ success: true }),
+    signUp: vi.fn().mockResolvedValue({ success: true }),
     isLoading: false,
   }),
 }));

@@ -8,7 +8,7 @@ import { ToastProvider } from './components/common/Toast';
 import { PageLoading } from './components/common/Loading';
 import Router from './Router';
 import { initializeAdapters, setAIAdapter } from './lib/adapters';
-import { initSyncQueue } from './lib/offline/syncQueue';
+import { initSyncQueue, disposeSyncQueue } from './lib/offline/syncQueue';
 import useFeatureFlagStore from './store/useFeatureFlagStore';
 import logger from './lib/utils/logger';
 
@@ -17,11 +17,12 @@ function App() {
 
   useEffect(() => {
     let unsubscribeFlags;
+    let disposeCapacitor;
 
     async function init() {
       try {
         // Capacitor 초기화
-        await initCapacitor();
+        disposeCapacitor = await initCapacitor();
 
         // Adapter 초기화 (환경 변수 기반)
         const config = {
@@ -58,6 +59,10 @@ function App() {
       if (typeof unsubscribeFlags === 'function') {
         unsubscribeFlags();
       }
+      if (typeof disposeCapacitor === 'function') {
+        disposeCapacitor().catch(() => {});
+      }
+      disposeSyncQueue().catch(() => {});
     };
   }, []);
 
