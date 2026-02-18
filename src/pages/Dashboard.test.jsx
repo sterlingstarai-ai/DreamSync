@@ -22,6 +22,12 @@ const mockState = vi.hoisted(() => ({
   createTodayForecast: vi.fn(),
   reviewYesterdayForecast: vi.fn(),
   toggleTodaySuggestion: vi.fn(),
+  getWeeklyProgress: vi.fn(),
+  coachPlansByUser: {},
+  coachPlan: null,
+  getTodayCoachPlan: vi.fn(),
+  upsertTodayCoachPlan: vi.fn(),
+  toggleCoachTask: vi.fn(),
 }));
 
 vi.mock('../store/useAuthStore', () => ({
@@ -73,6 +79,27 @@ vi.mock('../hooks/useFeatureFlags', () => ({
   }),
 }));
 
+vi.mock('../store/useGoalStore', () => ({
+  default: (selector) => {
+    const state = {
+      getWeeklyProgress: mockState.getWeeklyProgress,
+    };
+    return selector ? selector(state) : state;
+  },
+}));
+
+vi.mock('../store/useCoachPlanStore', () => ({
+  default: (selector) => {
+    const state = {
+      plansByUser: mockState.coachPlansByUser,
+      getTodayPlan: mockState.getTodayCoachPlan,
+      upsertTodayPlan: mockState.upsertTodayCoachPlan,
+      toggleTask: mockState.toggleCoachTask,
+    };
+    return selector ? selector(state) : state;
+  },
+}));
+
 vi.mock('../lib/utils/date', () => ({
   formatFriendlyDate: (d) => d,
 }));
@@ -110,6 +137,22 @@ describe('Dashboard', () => {
     mockState.createTodayForecast.mockReset();
     mockState.reviewYesterdayForecast.mockReset();
     mockState.toggleTodaySuggestion.mockReset();
+    mockState.getWeeklyProgress.mockReset();
+    mockState.getWeeklyProgress.mockReturnValue({
+      goals: { checkInDays: 5, dreamCount: 4, avgSleepHours: 7 },
+      metrics: { checkInDays: 5, dreamCount: 4, avgSleepHours: 7 },
+      progress: {
+        checkInDays: { achieved: true, target: 5 },
+        dreamCount: { achieved: true, target: 4 },
+        avgSleepHours: { achieved: true, target: 7 },
+      },
+    });
+    mockState.coachPlansByUser = {};
+    mockState.coachPlan = null;
+    mockState.getTodayCoachPlan.mockReset();
+    mockState.getTodayCoachPlan.mockImplementation(() => mockState.coachPlan);
+    mockState.upsertTodayCoachPlan.mockReset();
+    mockState.toggleCoachTask.mockReset();
   });
 
   it('should render user greeting', () => {
@@ -168,5 +211,26 @@ describe('Dashboard', () => {
       outcome: 'hit',
       reasons: ['수면이 좋아서'],
     });
+  });
+
+  it('should render coach plan card and toggle a task', () => {
+    mockState.coachPlan = {
+      date: '2026-02-17',
+      tasks: [
+        {
+          id: 'c1',
+          title: '호흡 10분',
+          source: 'alert',
+          estimatedMinutes: 10,
+          completed: false,
+        },
+      ],
+    };
+
+    renderDashboard();
+    expect(screen.getByText('오늘 코치 플랜')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /호흡 10분/ }));
+    expect(mockState.toggleCoachTask).toHaveBeenCalledWith('test-user', '2026-02-17', 'c1');
   });
 });

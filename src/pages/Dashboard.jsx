@@ -1,7 +1,7 @@
 /**
  * 대시보드 (홈) 페이지
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Moon, Sun, Sparkles, TrendingUp, Calendar,
@@ -20,9 +20,12 @@ import useCheckIn from '../hooks/useCheckIn';
 import useForecast from '../hooks/useForecast';
 import useFeatureFlags from '../hooks/useFeatureFlags';
 import useSleepStore from '../store/useSleepStore';
+import useGoalStore from '../store/useGoalStore';
+import useCoachPlanStore from '../store/useCoachPlanStore';
 import { formatFriendlyDate } from '../lib/utils/date';
 import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast';
 import { detectPatternAlerts } from '../lib/services/patternAlertService';
+import { buildCoachPlan, getCoachPlanCompletion } from '../lib/services/coachPlanService';
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -50,6 +53,13 @@ export default function Dashboard() {
     todayActionProgress,
   } = useForecast();
   const { isUHSEnabled } = useFeatureFlags();
+  const getWeeklyProgress = useGoalStore(state => state.getWeeklyProgress);
+  const upsertTodayCoachPlan = useCoachPlanStore(state => state.upsertTodayPlan);
+  const toggleCoachTask = useCoachPlanStore(state => state.toggleTask);
+  const todayCoachPlan = useCoachPlanStore((state) => {
+    if (!user?.id) return null;
+    return state.getTodayPlan(user.id);
+  });
 
   const activeError = dreamError || checkInError || forecastError;
 
@@ -61,6 +71,43 @@ export default function Dashboard() {
       recentDreams,
     });
   }, [recentLogs, recentDreams]);
+
+  const goalProgress = useMemo(() => {
+    if (!user?.id) return null;
+    return getWeeklyProgress(user.id, {
+      logs: recentLogs,
+      dreams: recentDreams,
+    });
+  }, [user, getWeeklyProgress, recentLogs, recentDreams]);
+
+  const generatedCoachPlan = useMemo(() => {
+    return buildCoachPlan({
+      forecast: todayForecast?.prediction || null,
+      alerts: patternAlerts,
+      goalProgress,
+      checkedInToday,
+      todayDreamCount: todayDreams.length,
+    });
+  }, [todayForecast, patternAlerts, goalProgress, checkedInToday, todayDreams.length]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    if (generatedCoachPlan.tasks.length === 0) return;
+
+    upsertTodayCoachPlan({
+      userId: user.id,
+      tasks: generatedCoachPlan.tasks,
+    });
+  }, [user, generatedCoachPlan, upsertTodayCoachPlan]);
+
+  const coachProgress = useMemo(() => {
+    return getCoachPlanCompletion(todayCoachPlan?.tasks || []);
+  }, [todayCoachPlan]);
+
+  const handleToggleCoachTask = useCallback((taskId) => {
+    if (!user?.id || !todayCoachPlan?.date) return;
+    toggleCoachTask(user.id, todayCoachPlan.date, taskId);
+  }, [user, todayCoachPlan, toggleCoachTask]);
 
   // 페이지 로드 시 오늘 예보 생성 (최소 데이터 + 에러 가드)
   const hasMinimumData = recentDreams.length > 0 || checkedInToday;
@@ -114,6 +161,16 @@ export default function Dashboard() {
             actionProgress={todayActionProgress}
           />
         </section>
+
+        {todayCoachPlan?.tasks?.length > 0 && (
+          <section className="mb-6">
+            <CoachPlanCard
+              plan={todayCoachPlan}
+              progress={coachProgress}
+              onToggleTask={handleToggleCoachTask}
+            />
+          </section>
+        )}
 
         {canReviewYesterdayForecast && yesterdayForecast && yesterdayLog && (
           <section className="mb-6">
@@ -370,6 +427,53 @@ function PatternAlertCard({ alerts }) {
             </p>
           )}
         </div>
+      </div>
+    </Card>
+  );
+}
+
+const COACH_SOURCE_LABELS = {
+  alert: '회복',
+  forecast: '예보',
+  goal: '목표',
+};
+
+function CoachPlanCard({ plan, progress, onToggleTask }) {
+  return (
+    <Card padding="lg">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-[var(--text-primary)]">오늘 코치 플랜</h3>
+        <span className="text-xs text-[var(--text-muted)]">
+          {progress.completed}/{progress.total} 완료
+        </span>
+      </div>
+
+      <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden mb-3">
+        <div className="h-full bg-emerald-500" style={{ width: `${progress.completionRate}%` }} />
+      </div>
+
+      <div className="space-y-2">
+        {plan.tasks.map(task => (
+          <button
+            key={task.id}
+            onClick={() => onToggleTask(task.id)}
+            className={`w-full flex items-start gap-3 rounded-xl px-3 py-2 text-left border transition-colors ${
+              task.completed
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-[var(--bg-secondary)] border-[var(--border-color)] hover:border-[var(--border-color-hover)]'
+            }`}
+          >
+            <CheckCircle2 className={`w-4 h-4 mt-0.5 ${task.completed ? 'text-emerald-400' : 'text-[var(--text-muted)]'}`} />
+            <div className="flex-1 min-w-0">
+              <p className={`text-sm ${task.completed ? 'text-emerald-300 line-through' : 'text-[var(--text-primary)]'}`}>
+                {task.title}
+              </p>
+              <p className="text-xs text-[var(--text-muted)] mt-0.5">
+                {COACH_SOURCE_LABELS[task.source] || '코치'} · 약 {task.estimatedMinutes || 0}분
+              </p>
+            </div>
+          </button>
+        ))}
       </div>
     </Card>
   );

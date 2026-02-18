@@ -18,6 +18,7 @@ import { formatDate, getRecentDays, getShortDayName } from '../lib/utils/date';
 import { getEmotionById } from '../constants/emotions';
 import useAuthStore from '../store/useAuthStore';
 import useGoalStore from '../store/useGoalStore';
+import useCoachPlanStore from '../store/useCoachPlanStore';
 
 export default function WeeklyReport() {
   const navigate = useNavigate();
@@ -33,6 +34,18 @@ export default function WeeklyReport() {
   } = useForecast();
   const getWeeklyProgress = useGoalStore(state => state.getWeeklyProgress);
   const updateGoals = useGoalStore(state => state.updateGoals);
+  const coachPlanStats = useCoachPlanStore((state) => {
+    if (!user?.id) {
+      return {
+        days: 7,
+        activeDays: 0,
+        totalTasks: 0,
+        completedTasks: 0,
+        completionRate: 0,
+      };
+    }
+    return state.getRecentPlanStats(user.id, 7);
+  });
 
   const activeError = dreamError || checkInError || forecastError;
 
@@ -374,6 +387,35 @@ export default function WeeklyReport() {
                     <p className="text-sm text-[var(--text-secondary)]">
                       차이: <strong className={experimentSummary.improvement >= 0 ? 'text-emerald-300' : 'text-red-300'}>
                         {experimentSummary.improvement > 0 ? '+' : ''}{experimentSummary.improvement}
+                      </strong>
+                    </p>
+                  </div>
+                )}
+              </Card>
+            </section>
+
+            {/* 코치 플랜 이행률 */}
+            <section>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3">
+                코치 플랜 이행률
+              </h2>
+              <Card padding="lg">
+                {coachPlanStats.totalTasks === 0 ? (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    코치 플랜 기록이 아직 없어요. 대시보드에서 오늘 플랜을 실행해보세요.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      최근 7일 활성 일수: <strong className="text-[var(--text-primary)]">{coachPlanStats.activeDays}일</strong>
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      완료 태스크: <strong className="text-emerald-300">{coachPlanStats.completedTasks}개</strong>
+                      {' '}/ {coachPlanStats.totalTasks}개
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      이행률: <strong className={coachPlanStats.completionRate >= 60 ? 'text-emerald-300' : 'text-amber-300'}>
+                        {coachPlanStats.completionRate}%
                       </strong>
                     </p>
                   </div>

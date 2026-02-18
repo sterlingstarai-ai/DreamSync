@@ -23,6 +23,8 @@ const mockState = vi.hoisted(() => ({
   },
   getWeeklyProgress: vi.fn(),
   updateGoals: vi.fn(),
+  coachPlansByUser: {},
+  getRecentPlanStats: vi.fn(),
 }));
 
 vi.mock('../store/useAuthStore', () => ({
@@ -70,6 +72,21 @@ vi.mock('../store/useGoalStore', () => {
   store.getState = () => ({
     getWeeklyProgress: mockState.getWeeklyProgress,
     updateGoals: mockState.updateGoals,
+  });
+  return { default: store };
+});
+
+vi.mock('../store/useCoachPlanStore', () => {
+  const store = (selector) => {
+    const state = {
+      plansByUser: mockState.coachPlansByUser,
+      getRecentPlanStats: mockState.getRecentPlanStats,
+    };
+    return selector ? selector(state) : state;
+  };
+  store.getState = () => ({
+    plansByUser: mockState.coachPlansByUser,
+    getRecentPlanStats: mockState.getRecentPlanStats,
   });
   return { default: store };
 });
@@ -138,6 +155,7 @@ describe('WeeklyReport', () => {
     };
     mockState.getWeeklyProgress.mockReset();
     mockState.updateGoals.mockReset();
+    mockState.getRecentPlanStats.mockReset();
     mockState.getWeeklyProgress.mockReturnValue({
       goals: {
         checkInDays: 5,
@@ -155,6 +173,13 @@ describe('WeeklyReport', () => {
         avgSleepHours: { current: 7.5, target: 7, rate: 100, achieved: true },
       },
     });
+    mockState.getRecentPlanStats.mockReturnValue({
+      days: 7,
+      activeDays: 3,
+      totalTasks: 9,
+      completedTasks: 6,
+      completionRate: 67,
+    });
   });
 
   it('renders goal and experiment sections', () => {
@@ -162,8 +187,10 @@ describe('WeeklyReport', () => {
 
     expect(screen.getByText('주간 코치 목표')).toBeInTheDocument();
     expect(screen.getByText('행동 실험 결과')).toBeInTheDocument();
+    expect(screen.getByText('코치 플랜 이행률')).toBeInTheDocument();
     expect(screen.getByText('2/3 달성')).toBeInTheDocument();
     expect(screen.getByText(/추천 행동을 절반 이상 실천한 날/)).toBeInTheDocument();
+    expect(screen.getByText('67%')).toBeInTheDocument();
   });
 
   it('updates weekly goal when pressing increment button', () => {
