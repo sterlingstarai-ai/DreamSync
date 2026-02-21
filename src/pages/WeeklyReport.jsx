@@ -49,7 +49,8 @@ export default function WeeklyReport() {
   const updateGoals = useGoalStore(state => state.updateGoals);
   const getSuggestedGoals = useGoalStore(state => state.getSuggestedGoals);
   const applySuggestedGoals = useGoalStore(state => state.applySuggestedGoals);
-  const coachPlanStats = useCoachPlanStore((state) => {
+  const getRecentPlanStats = useCoachPlanStore(state => state.getRecentPlanStats);
+  const coachPlanStats = useMemo(() => {
     if (!user?.id) {
       return {
         days: 7,
@@ -59,12 +60,12 @@ export default function WeeklyReport() {
         completionRate: 0,
       };
     }
-    return state.getRecentPlanStats(user.id, 7);
-  });
+    return getRecentPlanStats(user.id, 7);
+  }, [user, getRecentPlanStats]);
 
   const activeError = dreamError || checkInError || forecastError;
 
-  const weekDays = getRecentDays(7);
+  const weekDays = useMemo(() => getRecentDays(7), []);
 
   useEffect(() => {
     if (!weekDays.length) return;

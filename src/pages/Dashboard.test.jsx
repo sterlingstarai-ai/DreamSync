@@ -8,6 +8,7 @@ import Dashboard from './Dashboard';
 
 const mockState = vi.hoisted(() => ({
   user: { id: 'test-user', name: '테스트', onboardingCompleted: true },
+  dreams: [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }],
   todayDreams: [],
   recentDreams: [],
   checkedInToday: false,
@@ -39,6 +40,7 @@ vi.mock('../store/useAuthStore', () => ({
 
 vi.mock('../hooks/useDreams', () => ({
   default: () => ({
+    dreams: mockState.dreams,
     todayDreams: mockState.todayDreams,
     recentDreams: mockState.recentDreams,
     error: null,
@@ -123,6 +125,7 @@ function renderDashboard() {
 
 describe('Dashboard', () => {
   beforeEach(() => {
+    mockState.dreams = [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }];
     mockState.todayDreams = [];
     mockState.recentDreams = [];
     mockState.checkedInToday = false;
@@ -179,6 +182,15 @@ describe('Dashboard', () => {
     expect(screen.getByText('첫 꿈이나 체크인을 기록하면 예보가 시작됩니다')).toBeInTheDocument();
   });
 
+  it('should render beginner guide when dream count is low', () => {
+    mockState.dreams = [];
+    renderDashboard();
+
+    expect(screen.getByText('다음 단계 가이드')).toBeInTheDocument();
+    expect(screen.getByText('최근 활동 요약')).toBeInTheDocument();
+    expect(screen.queryByText('이번 주 현황')).not.toBeInTheDocument();
+  });
+
   it('should render pattern alert card when recent pattern is risky', () => {
     mockState.recentLogs = [
       { id: 'l1', date: '2026-02-17', condition: 2, stressLevel: 4, sleep: { duration: 300 } },
@@ -191,6 +203,7 @@ describe('Dashboard', () => {
   });
 
   it('should allow quick review for yesterday forecast', async () => {
+    mockState.checkInStats = { completionRate: 0, streak: 14 };
     mockState.canReviewYesterdayForecast = true;
     mockState.yesterdayForecast = {
       id: 'f-yesterday',
@@ -235,6 +248,7 @@ describe('Dashboard', () => {
   });
 
   it('shows recovery plan and appends recovery tasks to today plan', async () => {
+    mockState.checkInStats = { completionRate: 80, streak: 14 };
     mockState.checkedInToday = true;
     mockState.todayDreams = [{ id: 'd1', content: '꿈', createdAt: '2026-02-17T07:00:00' }];
     mockState.getWeeklyProgress.mockReturnValue({
@@ -261,6 +275,7 @@ describe('Dashboard', () => {
   });
 
   it('deduplicates recovery tasks already in today coach plan', async () => {
+    mockState.checkInStats = { completionRate: 70, streak: 14 };
     mockState.checkedInToday = false;
     mockState.todayDreams = [];
     mockState.coachPlan = {
