@@ -90,7 +90,7 @@ function hasValidSharedSecret(req: Request): boolean {
   return received === expected;
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+export async function handleRequest(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
@@ -147,4 +147,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(handleRequest);
+}
