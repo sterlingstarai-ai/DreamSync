@@ -6,6 +6,8 @@ import { useShallow } from 'zustand/react/shallow';
 import useDreamStore from '../store/useDreamStore';
 import useAuthStore from '../store/useAuthStore';
 
+const EMPTY_LIST = [];
+
 /**
  * 꿈 데이터 훅
  * @returns {Object}
@@ -48,18 +50,12 @@ export default function useDreams() {
   /**
    * 오늘의 꿈
    */
-  const todayDreams = useMemo(() => {
-    if (!userId) return [];
-    return getTodayDreams(userId);
-  }, [userId, getTodayDreams, dreams]);
+  const todayDreams = userId ? getTodayDreams(userId) : EMPTY_LIST;
 
   /**
    * 최근 7일 꿈
    */
-  const recentDreams = useMemo(() => {
-    if (!userId) return [];
-    return getRecentDreams(userId, 7);
-  }, [userId, getRecentDreams, dreams]);
+  const recentDreams = userId ? getRecentDreams(userId, 7) : EMPTY_LIST;
 
   /**
    * 새 꿈 기록
@@ -102,10 +98,7 @@ export default function useDreams() {
   /**
    * 모든 심볼 가져오기
    */
-  const symbols = useMemo(() => {
-    if (!userId) return [];
-    return getAllSymbols(userId);
-  }, [userId, getAllSymbols, dreams]);
+  const symbols = userId ? getAllSymbols(userId) : EMPTY_LIST;
 
   /**
    * 통계

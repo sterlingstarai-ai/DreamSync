@@ -2,7 +2,7 @@
  * 체크인 페이지
  * 30초 완료 목표
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react';
 import {
@@ -57,7 +57,7 @@ export default function CheckIn() {
     wakeTime: '07:00',
     quality: 3,
     duration: 480,
-    source: 'manual',
+    source: healthkitEnabled ? 'auto' : 'manual',
   });
   const checkInStartedAtRef = useRef(0);
   const stepStartedAtRef = useRef(0);
@@ -83,33 +83,24 @@ export default function CheckIn() {
     });
   }, [checkedInToday]);
 
-  // 웨어러블 수면 데이터 자동 채움
-  useEffect(() => {
-    if (!healthkitEnabled) return;
-    const todaySummary = getTodaySummary();
-    if (todaySummary && todaySummary.totalSleepMinutes) {
-      setSleepData(prev => ({
-        ...prev,
-        duration: todaySummary.totalSleepMinutes,
-        quality: todaySummary.sleepQualityScore != null
-          ? Math.round(todaySummary.sleepQualityScore / 2) // 0-10 → 1-5
-          : prev.quality,
-        bedTime: todaySummary.bedTime || prev.bedTime,
-        wakeTime: todaySummary.wakeTime || prev.wakeTime,
-        source: todaySummary.source,
-      }));
-    }
-  }, [healthkitEnabled]); // eslint-disable-line react-hooks/exhaustive-deps
+  const wearableSleepData = useMemo(() => {
+    if (!healthkitEnabled) return null;
+    const summary = getTodaySummary();
+    if (!summary || !summary.totalSleepMinutes) return null;
+    return {
+      bedTime: summary.bedTime || '23:00',
+      wakeTime: summary.wakeTime || '07:00',
+      quality: summary.sleepQualityScore != null ? Math.round(summary.sleepQualityScore / 2) : 3,
+      duration: summary.totalSleepMinutes,
+      source: summary.source,
+    };
+  }, [healthkitEnabled, getTodaySummary]);
 
-  // 이미 체크인 했으면 완료 화면
-  useEffect(() => {
-    if (checkedInToday && todayLog) {
-      setCondition(todayLog.condition);
-      setSelectedEmotions(todayLog.emotions);
-      setStressLevel(todayLog.stressLevel);
-      setSelectedEvents(todayLog.events);
-    }
-  }, [checkedInToday, todayLog]);
+  const resolvedSleepData = useMemo(() => {
+    if (!healthkitEnabled) return sleepData;
+    if (sleepData.source === 'manual') return sleepData;
+    return wearableSleepData || sleepData;
+  }, [healthkitEnabled, sleepData, wearableSleepData]);
 
   const triggerHaptic = async () => {
     if (Capacitor.isNativePlatform()) {
@@ -148,14 +139,14 @@ export default function CheckIn() {
       const today = getTodayString();
       setSleepSummary({
         date: today,
-        totalSleepMinutes: sleepData.duration,
-        sleepQualityScore: sleepData.quality * 2, // 1-5 → 2-10
+        totalSleepMinutes: resolvedSleepData.duration,
+        sleepQualityScore: resolvedSleepData.quality * 2, // 1-5 → 2-10
         remMinutes: null,
         deepMinutes: null,
         hrvMs: null,
-        bedTime: sleepData.bedTime,
-        wakeTime: sleepData.wakeTime,
-        source: sleepData.source,
+        bedTime: resolvedSleepData.bedTime,
+        wakeTime: resolvedSleepData.wakeTime,
+        source: resolvedSleepData.source,
         fetchedAt: new Date().toISOString(),
       });
     }
@@ -165,7 +156,7 @@ export default function CheckIn() {
       emotions: selectedEmotions,
       stressLevel,
       events: selectedEvents,
-      sleep: healthkitEnabled ? sleepData : undefined,
+      sleep: healthkitEnabled ? resolvedSleepData : undefined,
       durationSec: Math.max(1, Math.round((getTimestampMs() - checkInStartedAtRef.current) / 1000)),
     });
 
@@ -181,6 +172,9 @@ export default function CheckIn() {
 
   const currentStep = STEPS[step];
   const progress = ((step + 1) / STEPS.length) * 100;
+  const displayCondition = todayLog?.condition ?? condition;
+  const displayStressLevel = todayLog?.stressLevel ?? stressLevel;
+  const displayEmotions = todayLog?.emotions ?? selectedEmotions;
 
   if (checkedInToday) {
     return (
@@ -206,17 +200,17 @@ export default function CheckIn() {
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">컨디션</span>
                   <span className="font-medium">
-                    {['😫', '😔', '😐', '😊', '🤩'][condition - 1]}
+                    {['😫', '😔', '😐', '😊', '🤩'][displayCondition - 1]}
                   </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[var(--text-muted)]">스트레스</span>
-                  <span className="font-medium">{stressLevel}/5</span>
+                  <span className="font-medium">{displayStressLevel}/5</span>
                 </div>
                 <div>
                   <span className="text-[var(--text-muted)]">감정</span>
                   <div className="flex flex-wrap gap-1 mt-1">
-                    {selectedEmotions.map(id => {
+                    {displayEmotions.map(id => {
                       const emotion = getEmotionById(id);
                       return (
                         <span
@@ -300,7 +294,7 @@ export default function CheckIn() {
 
           {currentStep === 'sleep' && (
             <SleepStep
-              data={sleepData}
+              data={resolvedSleepData}
               onChange={setSleepData}
             />
           )}

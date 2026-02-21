@@ -11,6 +11,22 @@ import useSleepStore from '../store/useSleepStore';
 import { calculateConfidence } from '../lib/scoring/confidence';
 import { getDaysAgo } from '../lib/utils/date';
 
+const EMPTY_LIST = [];
+const EMPTY_EXPERIMENT_SUMMARY = {
+  sampleSize: 0,
+  highCompletionDays: 0,
+  lowCompletionDays: 0,
+  avgConditionHighCompletion: 0,
+  avgConditionLowCompletion: 0,
+  improvement: 0,
+};
+const EMPTY_REVIEW_STATS = {
+  verifiedCount: 0,
+  hitCount: 0,
+  missCount: 0,
+  partialCount: 0,
+};
+
 /**
  * 예보 훅
  * @returns {Object}
@@ -61,18 +77,12 @@ export default function useForecast() {
   /**
    * 오늘 예보
    */
-  const todayForecast = useMemo(() => {
-    if (!userId) return null;
-    return getTodayForecast(userId);
-  }, [userId, getTodayForecast, forecasts]);
+  const todayForecast = userId ? getTodayForecast(userId) : null;
 
   /**
    * 어제 예보/체크인 (예보 검증 루프)
    */
-  const yesterdayForecast = useMemo(() => {
-    if (!userId) return null;
-    return getForecastByDate(userId, yesterdayDate) || null;
-  }, [userId, getForecastByDate, yesterdayDate, forecasts]);
+  const yesterdayForecast = userId ? (getForecastByDate(userId, yesterdayDate) || null) : null;
 
   const yesterdayLog = useMemo(() => {
     if (!userId) return null;
@@ -86,50 +96,26 @@ export default function useForecast() {
   /**
    * 최근 예보 목록
    */
-  const recentForecasts = useMemo(() => {
-    if (!userId) return [];
-    return getRecentForecasts(userId, 7);
-  }, [userId, getRecentForecasts, forecasts]);
+  const recentForecasts = userId ? getRecentForecasts(userId, 7) : EMPTY_LIST;
 
   /**
    * 평균 정확도
    */
-  const averageAccuracy = useMemo(() => {
-    if (!userId) return 0;
-    return getAverageAccuracy(userId);
-  }, [userId, getAverageAccuracy, forecasts]);
+  const averageAccuracy = userId ? getAverageAccuracy(userId) : 0;
 
   /**
    * 행동 실험 통계
    */
-  const experimentSummary = useMemo(() => {
-    if (!userId) {
-      return {
-        sampleSize: 0,
-        highCompletionDays: 0,
-        lowCompletionDays: 0,
-        avgConditionHighCompletion: 0,
-        avgConditionLowCompletion: 0,
-        improvement: 0,
-      };
-    }
-    return getExperimentSummary(userId, 30);
-  }, [userId, getExperimentSummary, forecasts]);
+  const experimentSummary = userId
+    ? getExperimentSummary(userId, 30)
+    : EMPTY_EXPERIMENT_SUMMARY;
 
   /**
    * 예보 검증 통계
    */
-  const reviewStats = useMemo(() => {
-    if (!userId) {
-      return {
-        verifiedCount: 0,
-        hitCount: 0,
-        missCount: 0,
-        partialCount: 0,
-      };
-    }
-    return getReviewStats(userId, 30);
-  }, [userId, getReviewStats, forecasts]);
+  const reviewStats = userId
+    ? getReviewStats(userId, 30)
+    : EMPTY_REVIEW_STATS;
 
   /**
    * 오늘 추천 행동 실천 진행도
