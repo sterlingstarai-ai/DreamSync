@@ -33,7 +33,7 @@ export default function Dashboard() {
   const navigate = useNavigate();
   const trackedForecastDateRef = useRef(null);
   const user = useAuthStore(useShallow(state => state.user));
-  const { todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
+  const { dreams, todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
   const {
     checkedInToday,
     recentLogs,
@@ -65,6 +65,14 @@ export default function Dashboard() {
   });
 
   const activeError = dreamError || checkInError || forecastError;
+  const dreamCount = dreams.length;
+  const streak = checkInStats.streak || 0;
+  const dashboardLevel = dreamCount < 3 ? 'beginner'
+    : streak >= 14 ? 'advanced'
+    : 'active';
+  const isBeginner = dashboardLevel === 'beginner';
+  const isActive = dashboardLevel === 'active';
+  const isAdvanced = dashboardLevel === 'advanced';
 
   const greeting = getGreeting();
   const userName = user?.name || '사용자';
@@ -160,6 +168,14 @@ export default function Dashboard() {
     trackedForecastDateRef.current = todayForecast.date;
   }, [todayForecast, calculatedConfidence]);
 
+  useEffect(() => {
+    const lifecycleStage = isBeginner ? (dreamCount === 0 ? 'L0' : 'L1') : isActive ? 'L2' : 'L3';
+    analytics.setUserProperties({
+      lifecycle_stage: lifecycleStage,
+      current_streak: streak,
+    });
+  }, [dreamCount, streak, isBeginner, isActive]);
+
   return (
     <>
       <PageContainer className="pb-24">
@@ -188,24 +204,26 @@ export default function Dashboard() {
         )}
 
         {/* Today's Forecast Card */}
-        {patternAlerts.length > 0 && (
+        {!isBeginner && patternAlerts.length > 0 && (
           <section className="mb-4">
             <PatternAlertCard alerts={patternAlerts} />
           </section>
         )}
 
-        <section className="mb-6">
-          <ForecastCard
-            forecast={todayForecast}
-            isLoading={isGenerating}
-            confidence={calculatedConfidence}
-            hasMinimumData={hasMinimumData}
-            onToggleSuggestion={toggleTodaySuggestion}
-            actionProgress={todayActionProgress}
-          />
-        </section>
+        {!isBeginner && (
+          <section className="mb-6">
+            <ForecastCard
+              forecast={todayForecast}
+              isLoading={isGenerating}
+              confidence={calculatedConfidence}
+              hasMinimumData={hasMinimumData}
+              onToggleSuggestion={toggleTodaySuggestion}
+              actionProgress={todayActionProgress}
+            />
+          </section>
+        )}
 
-        {todayCoachPlan?.tasks?.length > 0 && (
+        {!isBeginner && todayCoachPlan?.tasks?.length > 0 && (
           <section className="mb-6">
             <CoachPlanCard
               plan={todayCoachPlan}
@@ -215,7 +233,7 @@ export default function Dashboard() {
           </section>
         )}
 
-        {recoveryPlan.isNeeded && (
+        {isAdvanced && recoveryPlan.isNeeded && (
           <section className="mb-6">
             <GoalRecoveryCard
               plan={recoveryPlan}
@@ -224,7 +242,7 @@ export default function Dashboard() {
           </section>
         )}
 
-        {canReviewYesterdayForecast && yesterdayForecast && yesterdayLog && (
+        {isAdvanced && canReviewYesterdayForecast && yesterdayForecast && yesterdayLog && (
           <section className="mb-6">
             <ForecastReviewCard
               forecast={yesterdayForecast}
@@ -252,53 +270,76 @@ export default function Dashboard() {
           />
         </section>
 
-        {/* Stats Overview */}
-        <section className="mb-6">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-              이번 주 현황
-            </h2>
-            <button
-              onClick={() => navigate('/report')}
-              aria-label="주간 리포트 자세히 보기"
-              className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
-            >
-              자세히 보기
-              <ChevronRight className="w-4 h-4" aria-hidden="true" />
-            </button>
-          </div>
+        {isBeginner ? (
+          <>
+            <section className="mb-6">
+              <NextStepGuideCard
+                checkedInToday={checkedInToday}
+                hasDreamToday={todayDreams.length > 0}
+                onMoveDream={() => navigate('/dream')}
+                onMoveCheckIn={() => navigate('/checkin')}
+                onMoveReport={() => navigate('/report')}
+              />
+            </section>
+            <section className="mb-6">
+              <MiniActivitySummary
+                dreamCount={dreamCount}
+                streak={streak}
+                checkedInToday={checkedInToday}
+              />
+            </section>
+          </>
+        ) : (
+          <>
+            {/* Stats Overview */}
+            <section className="mb-6">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                  이번 주 현황
+                </h2>
+                <button
+                  onClick={() => navigate('/report')}
+                  aria-label="주간 리포트 자세히 보기"
+                  className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                >
+                  자세히 보기
+                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                </button>
+              </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <StatCard
-              label="꿈 기록"
-              value={recentDreams.length}
-              unit="개"
-              icon={Moon}
-            />
-            <StatCard
-              label="체크인"
-              value={checkInStats.completionRate}
-              unit="%"
-              icon={Calendar}
-            />
-            <StatCard
-              label="연속"
-              value={checkInStats.streak}
-              unit="일"
-              icon={TrendingUp}
-            />
-          </div>
-        </section>
+              <div className="grid grid-cols-3 gap-3">
+                <StatCard
+                  label="꿈 기록"
+                  value={recentDreams.length}
+                  unit="개"
+                  icon={Moon}
+                />
+                <StatCard
+                  label="체크인"
+                  value={checkInStats.completionRate}
+                  unit="%"
+                  icon={Calendar}
+                />
+                <StatCard
+                  label="연속"
+                  value={checkInStats.streak}
+                  unit="일"
+                  icon={TrendingUp}
+                />
+              </div>
+            </section>
 
-        {/* UHS Card (Phase 4 - Feature Flag) */}
-        {isUHSEnabled && (
-          <section className="mb-6">
-            <UHSCard />
-          </section>
+            {/* UHS Card (Phase 4 - Feature Flag) */}
+            {isAdvanced && isUHSEnabled && (
+              <section className="mb-6">
+                <UHSCard />
+              </section>
+            )}
+          </>
         )}
 
         {/* Recent Dreams */}
-        {recentDreams.length > 0 && (
+        {!isBeginner && recentDreams.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-lg font-semibold text-[var(--text-primary)]">
@@ -653,6 +694,71 @@ function ForecastReviewCard({ forecast, log, onReview }) {
             {reason}
           </button>
         ))}
+      </div>
+    </Card>
+  );
+}
+
+function NextStepGuideCard({ checkedInToday, hasDreamToday, onMoveDream, onMoveCheckIn, onMoveReport }) {
+  const nextAction = !hasDreamToday
+    ? {
+      title: '오늘 꿈을 먼저 기록해보세요',
+      description: '첫 기록이 쌓이면 예보 정확도가 더 빨리 올라갑니다.',
+      cta: '꿈 기록하기',
+      onClick: onMoveDream,
+    }
+    : !checkedInToday
+      ? {
+        title: '오늘 체크인을 완료해보세요',
+        description: '30초 체크인으로 오늘 데이터를 완성할 수 있어요.',
+        cta: '체크인하기',
+        onClick: onMoveCheckIn,
+      }
+      : {
+        title: '좋아요, 오늘 루틴을 완료했어요',
+        description: '내일은 주간 리포트에서 패턴을 확인해보세요.',
+        cta: '리포트 보기',
+        onClick: onMoveReport,
+      };
+
+  return (
+    <Card variant="gradient" padding="lg">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm text-violet-200/80">다음 단계 가이드</p>
+          <h3 className="text-lg font-semibold text-white mt-1">{nextAction.title}</h3>
+          <p className="text-sm text-violet-100/80 mt-2">{nextAction.description}</p>
+        </div>
+        <Target className="w-5 h-5 text-violet-100/70 flex-shrink-0 mt-1" />
+      </div>
+      <Button
+        className="mt-4"
+        variant="secondary"
+        onClick={nextAction.onClick}
+      >
+        {nextAction.cta}
+      </Button>
+    </Card>
+  );
+}
+
+function MiniActivitySummary({ dreamCount, streak, checkedInToday }) {
+  return (
+    <Card padding="lg">
+      <h3 className="font-semibold text-[var(--text-primary)] mb-3">최근 활동 요약</h3>
+      <div className="grid grid-cols-3 gap-3 text-center">
+        <div className="rounded-xl bg-[var(--bg-tertiary)] py-3">
+          <p className="text-xs text-[var(--text-muted)]">전체 꿈</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)] mt-1">{dreamCount}</p>
+        </div>
+        <div className="rounded-xl bg-[var(--bg-tertiary)] py-3">
+          <p className="text-xs text-[var(--text-muted)]">연속</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)] mt-1">{streak}일</p>
+        </div>
+        <div className="rounded-xl bg-[var(--bg-tertiary)] py-3">
+          <p className="text-xs text-[var(--text-muted)]">오늘 체크인</p>
+          <p className="text-lg font-semibold text-[var(--text-primary)] mt-1">{checkedInToday ? '완료' : '대기'}</p>
+        </div>
       </div>
     </Card>
   );

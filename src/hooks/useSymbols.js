@@ -6,6 +6,8 @@ import { useShallow } from 'zustand/react/shallow';
 import useSymbolStore from '../store/useSymbolStore';
 import useAuthStore from '../store/useAuthStore';
 
+const EMPTY_LIST = [];
+
 /**
  * 심볼 훅
  * @returns {Object}
@@ -17,7 +19,7 @@ export default function useSymbols() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const {
-    symbols,
+    symbols: _symbols,
     isLoading,
     error,
   } = useSymbolStore(useShallow(state => ({
@@ -38,34 +40,24 @@ export default function useSymbols() {
   /**
    * 사용자의 모든 심볼
    */
-  const userSymbols = useMemo(() => {
-    if (!userId) return [];
-    return getUserSymbols(userId);
-  }, [userId, getUserSymbols, symbols]);
+  const userSymbols = userId ? getUserSymbols(userId) : EMPTY_LIST;
 
   /**
    * 상위 심볼
    */
-  const topSymbols = useMemo(() => {
-    if (!userId) return [];
-    return getTopSymbols(userId, 10);
-  }, [userId, getTopSymbols, symbols]);
+  const topSymbols = userId ? getTopSymbols(userId, 10) : EMPTY_LIST;
 
   /**
    * 최근 심볼
    */
-  const recentSymbols = useMemo(() => {
-    if (!userId) return [];
-    return getRecentSymbols(userId, 10);
-  }, [userId, getRecentSymbols, symbols]);
+  const recentSymbols = userId ? getRecentSymbols(userId, 10) : EMPTY_LIST;
 
   /**
    * 검색 결과
    */
-  const searchResults = useMemo(() => {
-    if (!userId || !searchQuery.trim()) return [];
-    return searchSymbols(userId, searchQuery);
-  }, [userId, searchQuery, searchSymbols, symbols]);
+  const searchResults = userId && searchQuery.trim()
+    ? searchSymbols(userId, searchQuery)
+    : EMPTY_LIST;
 
   /**
    * 표시할 심볼 목록 (검색 중이면 검색 결과, 아니면 전체)
@@ -115,10 +107,7 @@ export default function useSymbols() {
   /**
    * 총 심볼 수
    */
-  const totalCount = useMemo(() => {
-    if (!userId) return 0;
-    return getTotalSymbolCount(userId);
-  }, [userId, getTotalSymbolCount, symbols]);
+  const totalCount = userId ? getTotalSymbolCount(userId) : 0;
 
   /**
    * 통계

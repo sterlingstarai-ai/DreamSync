@@ -6,6 +6,8 @@ import { useShallow } from 'zustand/react/shallow';
 import useCheckInStore from '../store/useCheckInStore';
 import useAuthStore from '../store/useAuthStore';
 
+const EMPTY_LIST = [];
+
 /**
  * 체크인 훅
  * @returns {Object}
@@ -47,58 +49,37 @@ export default function useCheckIn() {
   /**
    * 오늘 체크인
    */
-  const todayLog = useMemo(() => {
-    if (!userId) return null;
-    return getTodayLog(userId);
-  }, [userId, getTodayLog, logs]);
+  const todayLog = userId ? getTodayLog(userId) : null;
 
   /**
    * 오늘 체크인 여부
    */
-  const checkedInToday = useMemo(() => {
-    if (!userId) return false;
-    return hasCheckedInToday(userId);
-  }, [userId, hasCheckedInToday, logs]);
+  const checkedInToday = userId ? hasCheckedInToday(userId) : false;
 
   /**
    * 최근 7일 체크인
    */
-  const recentLogs = useMemo(() => {
-    if (!userId) return [];
-    return getRecentLogs(userId, 7);
-  }, [userId, getRecentLogs, logs]);
+  const recentLogs = userId ? getRecentLogs(userId, 7) : EMPTY_LIST;
 
   /**
    * 연속 체크인 일수
    */
-  const streak = useMemo(() => {
-    if (!userId) return 0;
-    return getStreak(userId);
-  }, [userId, getStreak, logs]);
+  const streak = userId ? getStreak(userId) : 0;
 
   /**
    * 평균 컨디션
    */
-  const averageCondition = useMemo(() => {
-    if (!userId) return 0;
-    return getAverageCondition(userId, 7);
-  }, [userId, getAverageCondition, logs]);
+  const averageCondition = userId ? getAverageCondition(userId, 7) : 0;
 
   /**
    * 주간 완료율
    */
-  const completionRate = useMemo(() => {
-    if (!userId) return 0;
-    return getWeeklyCompletionRate(userId);
-  }, [userId, getWeeklyCompletionRate, logs]);
+  const completionRate = userId ? getWeeklyCompletionRate(userId) : 0;
 
   /**
    * 상위 감정
    */
-  const topEmotions = useMemo(() => {
-    if (!userId) return [];
-    return getTopEmotions(userId, 7);
-  }, [userId, getTopEmotions, logs]);
+  const topEmotions = userId ? getTopEmotions(userId, 7) : EMPTY_LIST;
 
   /**
    * 새 체크인 추가

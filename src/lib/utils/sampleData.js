@@ -7,13 +7,14 @@ import { getTodayString } from './date';
 import useDreamStore from '../../store/useDreamStore';
 import useCheckInStore from '../../store/useCheckInStore';
 import useSymbolStore from '../../store/useSymbolStore';
+import useForecastStore from '../../store/useForecastStore';
 
 const SAMPLE_VERSION = 'v2';
 
 /**
  * 샘플 데이터를 스토어에 로드
  * @param {string} userId
- * @returns {{added: boolean, dreamsAdded: number, checkInsAdded: number, symbolsSynced: number}}
+ * @returns {{added: boolean, dreamsAdded: number, checkInsAdded: number, forecastsAdded: number, symbolsSynced: number}}
  */
 export function loadSampleData(userId) {
   if (!userId) {
@@ -21,6 +22,7 @@ export function loadSampleData(userId) {
       added: false,
       dreamsAdded: 0,
       checkInsAdded: 0,
+      forecastsAdded: 0,
       symbolsSynced: 0,
     };
   }
@@ -101,9 +103,34 @@ export function loadSampleData(userId) {
     },
   ];
 
+  // 예보 템플릿
+  const forecastTemplates = [
+    {
+      sampleKey: `${SAMPLE_VERSION}:forecast:today`,
+      date: today,
+      prediction: {
+        condition: 4,
+        confidence: 72,
+        summary: '안정적인 컨디션이 예상됩니다. 너무 무리하지 말고 흐름을 유지해보세요.',
+        risks: ['저녁 피로 누적'],
+        suggestions: ['점심 후 10분 산책', '취침 1시간 전 스크린 타임 줄이기'],
+      },
+      actual: null,
+      accuracy: null,
+      experiment: {
+        plannedSuggestions: ['점심 후 10분 산책', '취침 1시간 전 스크린 타임 줄이기'],
+        completedSuggestions: [],
+        completionRate: 0,
+        updatedAt: `${today}T08:30:00.000Z`,
+      },
+      createdAt: `${today}T08:30:00.000Z`,
+    },
+  ];
+
   const dreamStore = useDreamStore.getState();
   const checkInStore = useCheckInStore.getState();
   const symbolStore = useSymbolStore.getState();
+  const forecastStore = useForecastStore.getState();
 
   const existingDreams = dreamStore.dreams.filter(d => d.userId === userId);
   const existingDreamKeys = new Set(
@@ -118,6 +145,11 @@ export function loadSampleData(userId) {
       .filter(l => l.userId === userId)
       .map(l => l.date),
   );
+  const existingForecastDates = new Set(
+    forecastStore.forecasts
+      .filter(f => f.userId === userId)
+      .map(f => f.date),
+  );
 
   const dreams = dreamTemplates.map(template => ({
     id: generateId(),
@@ -130,6 +162,11 @@ export function loadSampleData(userId) {
     userId,
     ...template,
   }));
+  const forecasts = forecastTemplates.map(template => ({
+    id: generateId(),
+    userId,
+    ...template,
+  }));
 
   const newDreams = dreams.filter(
     dream => !existingDreamKeys.has(getDreamIdentity(dream.createdAt, dream.content)),
@@ -138,6 +175,9 @@ export function loadSampleData(userId) {
   const newCheckIns = checkIns.filter(
     checkIn => !existingCheckInDates.has(checkIn.date),
   );
+  const newForecasts = forecasts.filter(
+    forecast => !existingForecastDates.has(forecast.date),
+  );
 
   if (newDreams.length > 0) {
     useDreamStore.setState(state => ({ dreams: [...newDreams, ...state.dreams] }));
@@ -145,6 +185,9 @@ export function loadSampleData(userId) {
 
   if (newCheckIns.length > 0) {
     useCheckInStore.setState(state => ({ logs: [...newCheckIns, ...state.logs] }));
+  }
+  if (newForecasts.length > 0) {
+    useForecastStore.setState(state => ({ forecasts: [...newForecasts, ...state.forecasts] }));
   }
 
   // 심볼은 꿈 분석 결과를 기준으로 재구성 (중복 dreamId는 store에서 자동 방지)
@@ -161,9 +204,10 @@ export function loadSampleData(userId) {
   }
 
   return {
-    added: newDreams.length > 0 || newCheckIns.length > 0,
+    added: newDreams.length > 0 || newCheckIns.length > 0 || newForecasts.length > 0,
     dreamsAdded: newDreams.length,
     checkInsAdded: newCheckIns.length,
+    forecastsAdded: newForecasts.length,
     symbolsSynced,
   };
 }
