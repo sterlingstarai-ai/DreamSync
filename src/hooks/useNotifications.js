@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import logger from '../lib/utils/logger';
+import analytics from '../lib/adapters/analytics';
 
 /**
  * 알림 ID 상수
@@ -59,6 +60,40 @@ export default function useNotifications() {
 
     init();
   }, [checkPermission]);
+
+  useEffect(() => {
+    if (!isNative) return;
+
+    let listenerHandle = null;
+    let disposed = false;
+
+    LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
+      const notificationType = event?.notification?.actionTypeId
+        || event?.actionId
+        || event?.notification?.id
+        || 'unknown';
+      analytics.track(analytics.events.NOTIFICATION_CLICK, {
+        notification_type: String(notificationType),
+      });
+    })
+      .then((handle) => {
+        if (disposed) {
+          handle.remove().catch(() => {});
+          return;
+        }
+        listenerHandle = handle;
+      })
+      .catch((error) => {
+        logger.error('Failed to register notification click listener:', error);
+      });
+
+    return () => {
+      disposed = true;
+      if (listenerHandle) {
+        listenerHandle.remove().catch(() => {});
+      }
+    };
+  }, [isNative]);
 
   /**
    * 권한 요청

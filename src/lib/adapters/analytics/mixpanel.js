@@ -33,7 +33,7 @@ async function initialize() {
     mixpanel = mp.default;
     mixpanel.init(token, {
       debug: import.meta.env.DEV,
-      track_pageview: false,
+      track_pageview: true,
       persistence: 'localStorage',
     });
     isInitialized = true;
@@ -53,6 +53,8 @@ function identify(userId, traits = {}) {
 
   // 민감하지 않은 traits만 설정
   const safeTraits = {
+    $name: traits.name,
+    $email: traits.email,
     $created: traits.createdAt,
     platform: traits.platform,
     app_version: traits.appVersion,

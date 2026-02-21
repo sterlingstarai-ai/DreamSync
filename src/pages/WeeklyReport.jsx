@@ -1,7 +1,7 @@
 /**
  * 주간 리포트 페이지
  */
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Moon, Calendar, TrendingUp, TrendingDown,
@@ -19,6 +19,7 @@ import { getEmotionById } from '../constants/emotions';
 import useAuthStore from '../store/useAuthStore';
 import useGoalStore from '../store/useGoalStore';
 import useCoachPlanStore from '../store/useCoachPlanStore';
+import analytics from '../lib/adapters/analytics';
 
 export default function WeeklyReport() {
   const navigate = useNavigate();
@@ -64,6 +65,13 @@ export default function WeeklyReport() {
   const activeError = dreamError || checkInError || forecastError;
 
   const weekDays = getRecentDays(7);
+
+  useEffect(() => {
+    if (!weekDays.length) return;
+    analytics.track(analytics.events.REPORT_VIEW, {
+      week: weekDays[0],
+    });
+  }, [weekDays]);
 
   // 주간 데이터가 충분한지 확인
   const hasEnoughData = recentLogs.length >= 3 || recentDreams.length >= 2;
@@ -187,6 +195,9 @@ export default function WeeklyReport() {
     if (navigator.share) {
       try {
         await navigator.share({ title: 'DreamSync 주간 리포트', text });
+        analytics.track(analytics.events.REPORT_SHARE, {
+          share_method: 'navigator_share',
+        });
         return;
       } catch {
         // user cancelled or share failed — fall through to clipboard
@@ -195,6 +206,9 @@ export default function WeeklyReport() {
 
     try {
       await navigator.clipboard.writeText(text);
+      analytics.track(analytics.events.REPORT_SHARE, {
+        share_method: 'clipboard',
+      });
       toast.success('클립보드에 복사되었습니다');
     } catch {
       toast.warning('공유할 수 없습니다');

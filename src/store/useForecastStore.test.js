@@ -3,6 +3,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useForecastStore from './useForecastStore';
+import analytics from '../lib/adapters/analytics';
 
 // Mock createForecast
 vi.mock('../lib/ai/generateForecast', () => ({
@@ -23,6 +24,7 @@ vi.mock('../lib/ai/generateForecast', () => ({
 describe('useForecastStore', () => {
   beforeEach(() => {
     useForecastStore.getState().reset();
+    vi.restoreAllMocks();
   });
 
   it('should start with empty state', () => {
@@ -69,6 +71,7 @@ describe('useForecastStore', () => {
   });
 
   it('should record actual and calculate accuracy', async () => {
+    const trackSpy = vi.spyOn(analytics, 'track');
     const forecast = await useForecastStore.getState().generateForecast({
       userId: 'user-1',
       recentDreams: [],
@@ -82,6 +85,10 @@ describe('useForecastStore', () => {
     expect(updated.actual.outcome).toBe('partial');
     expect(Array.isArray(updated.actual.reasons)).toBe(true);
     expect(updated.accuracy).toBe(100); // Same condition = 100%
+    expect(trackSpy).toHaveBeenCalledWith(
+      analytics.events.FORECAST_FEEDBACK,
+      expect.objectContaining({ was_accurate: true }),
+    );
   });
 
   it('should calculate accuracy with difference', async () => {

@@ -2,7 +2,7 @@
  * 체크인 페이지
  * 30초 완료 목표
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle2, ChevronRight, Sparkles } from 'lucide-react';
 import {
@@ -17,8 +17,9 @@ import { EMOTIONS, getEmotionById } from '../constants/emotions';
 import { EVENTS, getEventsByCategory, EVENT_CATEGORIES } from '../constants/events';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
-import { getTodayString } from '../lib/utils/date';
+import { getTodayString, getTimestampMs } from '../lib/utils/date';
 import { Moon, Sun, Clock } from 'lucide-react';
+import analytics from '../lib/adapters/analytics';
 
 export default function CheckIn() {
   const navigate = useNavigate();
@@ -58,6 +59,29 @@ export default function CheckIn() {
     duration: 480,
     source: 'manual',
   });
+  const checkInStartedAtRef = useRef(0);
+  const stepStartedAtRef = useRef(0);
+  const currentStepRef = useRef(0);
+  const completedRef = useRef(false);
+
+  useEffect(() => {
+    if (checkedInToday) return;
+    analytics.track(analytics.events.CHECKIN_START);
+    checkInStartedAtRef.current = getTimestampMs();
+    stepStartedAtRef.current = getTimestampMs();
+  }, [checkedInToday]);
+
+  useEffect(() => {
+    currentStepRef.current = step;
+  }, [step]);
+
+  useEffect(() => () => {
+    if (checkedInToday || completedRef.current) return;
+    if (currentStepRef.current <= 0) return;
+    analytics.track(analytics.events.CHECKIN_ABANDON, {
+      abandoned_step: currentStepRef.current + 1,
+    });
+  }, [checkedInToday]);
 
   // 웨어러블 수면 데이터 자동 채움
   useEffect(() => {
@@ -99,8 +123,14 @@ export default function CheckIn() {
 
   const handleNext = async () => {
     await triggerHaptic();
+    const durationSec = Math.max(1, Math.round((getTimestampMs() - stepStartedAtRef.current) / 1000));
+    analytics.track(analytics.events.CHECKIN_STEP, {
+      step: step + 1,
+      duration_sec: durationSec,
+    });
     if (step < STEPS.length - 1) {
       setStep(step + 1);
+      stepStartedAtRef.current = getTimestampMs();
     } else {
       handleSubmit();
     }
@@ -136,9 +166,11 @@ export default function CheckIn() {
       stressLevel,
       events: selectedEvents,
       sleep: healthkitEnabled ? sleepData : undefined,
+      durationSec: Math.max(1, Math.round((getTimestampMs() - checkInStartedAtRef.current) / 1000)),
     });
 
     if (result) {
+      completedRef.current = true;
       toast.success('체크인 완료!', '오늘 하루도 수고했어요');
       // 예보 정확도 기록
       recordActualFromCheckIn();

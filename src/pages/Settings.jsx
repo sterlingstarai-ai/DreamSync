@@ -22,6 +22,7 @@ import useCheckInStore from '../store/useCheckInStore';
 import useSymbolStore from '../store/useSymbolStore';
 import useForecastStore from '../store/useForecastStore';
 import storage from '../lib/adapters/storage';
+import analytics from '../lib/adapters/analytics';
 
 export default function Settings() {
   const toast = useToast();
@@ -46,6 +47,13 @@ export default function Settings() {
   const [showDevMode, setShowDevMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState('');
+
+  const trackSettingChange = useCallback((settingKey, newValue) => {
+    analytics.track(analytics.events.SETTINGS_CHANGE, {
+      setting_key: settingKey,
+      new_value: typeof newValue === 'object' ? JSON.stringify(newValue) : String(newValue),
+    });
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -92,10 +100,24 @@ export default function Settings() {
   const applyNotificationChanges = useCallback(async (partial, shouldSync = notifications.enabled) => {
     const next = { ...notifications, ...partial };
     updateNotifications(partial);
+    for (const [key, value] of Object.entries(partial)) {
+      trackSettingChange(`notifications.${key}`, value);
+    }
     if (shouldSync) {
       await applyNotificationSettings(next);
     }
-  }, [notifications, updateNotifications, applyNotificationSettings]);
+  }, [notifications, updateNotifications, applyNotificationSettings, trackSettingChange]);
+
+  const handlePrivacyChange = useCallback((key, value) => {
+    updatePrivacy({ [key]: value });
+    trackSettingChange(`privacy.${key}`, value);
+  }, [updatePrivacy, trackSettingChange]);
+
+  const handleFeatureFlagToggle = useCallback((flagKey) => {
+    const nextValue = !isEnabled(flagKey);
+    toggleFlag(flagKey);
+    trackSettingChange(`feature.${flagKey}`, nextValue);
+  }, [isEnabled, toggleFlag, trackSettingChange]);
 
   const handleNotificationToggle = async (enabled) => {
     if (enabled && !hasPermission) {
@@ -229,14 +251,14 @@ export default function Settings() {
               label="사용 데이터 분석"
               description="앱 개선을 위한 익명 데이터 수집"
               enabled={privacy.analytics}
-              onChange={(v) => updatePrivacy({ analytics: v })}
+              onChange={(v) => handlePrivacyChange('analytics', v)}
             />
             <SettingToggle
               icon={Shield}
               label="오류 보고"
               description="앱 안정성 향상을 위한 오류 보고"
               enabled={privacy.crashReports}
-              onChange={(v) => updatePrivacy({ crashReports: v })}
+              onChange={(v) => handlePrivacyChange('crashReports', v)}
             />
           </SettingSection>
 
@@ -252,14 +274,14 @@ export default function Settings() {
                     ? 'Health Connect에서 수면 데이터 자동 수집'
                     : '건강 앱에서 수면 데이터 자동 수집'}
                 enabled={isEnabled('healthkit')}
-                onChange={() => toggleFlag('healthkit')}
+                onChange={() => handleFeatureFlagToggle('healthkit')}
               />
               <SettingToggle
                 icon={Smartphone}
                 label="UHS 스코어"
                 description="통합 건강 점수 표시 (베타)"
                 enabled={isEnabled('uhs')}
-                onChange={() => toggleFlag('uhs')}
+                onChange={() => handleFeatureFlagToggle('uhs')}
               />
             </SettingSection>
           )}
@@ -352,7 +374,7 @@ export default function Settings() {
                     </p>
                   </div>
                   <button
-                    onClick={() => toggleFlag(key)}
+                    onClick={() => handleFeatureFlagToggle(key)}
                     className="text-violet-400"
                   >
                     {isEnabled(key) ? (

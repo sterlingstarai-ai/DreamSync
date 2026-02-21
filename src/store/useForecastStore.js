@@ -8,6 +8,7 @@ import { generateId } from '../lib/utils/id';
 import { getTodayString } from '../lib/utils/date';
 import { createForecast } from '../lib/ai/generateForecast';
 import { zustandStorage } from '../lib/adapters/storage';
+import analytics from '../lib/adapters/analytics';
 
 const MAX_FORECASTS = 365;
 const ACTION_SUCCESS_THRESHOLD = 50;
@@ -113,6 +114,11 @@ const useForecastStore = create(
         // 컨디션 기반 정확도 (1-5 스케일, 차이 1당 -25%)
         const conditionDiff = Math.abs(forecast.prediction.condition - normalizedActual.condition);
         const accuracy = Math.max(0, Math.round(100 - conditionDiff * 25));
+        const wasAccurate = normalizedActual.outcome === 'hit'
+          ? true
+          : normalizedActual.outcome === 'miss'
+            ? false
+            : accuracy >= 75;
 
         set((state) => ({
           forecasts: state.forecasts.map(f =>
@@ -121,6 +127,10 @@ const useForecastStore = create(
               : f
           ),
         }));
+
+        analytics.track(analytics.events.FORECAST_FEEDBACK, {
+          was_accurate: wasAccurate,
+        });
       },
 
       /**

@@ -4,16 +4,20 @@
  *
  * 어댑터 패턴:
  * - MockAnalyticsAdapter: 개발용 (콘솔 로깅)
- * - MixpanelAdapter: 실제 분석 (Phase 2+)
+ * - MixpanelAdapter: 실제 분석
  */
 import logger from '../utils/logger';
+import MixpanelAnalyticsAdapter from './analytics/mixpanel';
 
 /**
  * Analytics Adapter 인터페이스
  * @typedef {Object} AnalyticsAdapter
- * @property {function(string): void} identify
+ * @property {function(): (void|Promise<void>)} [initialize]
+ * @property {function(string, Object=): void} identify
  * @property {function(string, Object?): void} track
  * @property {function(Object): void} setUserProperties
+ * @property {function(string, any): void} [setUserProperty]
+ * @property {function(string, number=): void} [incrementUserProperty]
  * @property {function(): void} reset
  */
 
@@ -22,9 +26,12 @@ import logger from '../utils/logger';
  */
 const MockAnalyticsAdapter = {
   name: 'mock',
+  initialize() {
+    // no-op
+  },
 
-  identify(userId) {
-    logger.log('[Analytics] Identify:', userId);
+  identify(userId, traits = {}) {
+    logger.log('[Analytics] Identify:', userId, traits);
   },
 
   track(event, properties = {}) {
@@ -33,6 +40,14 @@ const MockAnalyticsAdapter = {
 
   setUserProperties(properties) {
     logger.log('[Analytics] User Properties:', properties);
+  },
+
+  setUserProperty(key, value) {
+    logger.log('[Analytics] User Property:', key, value);
+  },
+
+  incrementUserProperty(key, amount = 1) {
+    logger.log('[Analytics] Increment User Property:', key, amount);
   },
 
   reset() {
@@ -45,29 +60,34 @@ const MockAnalyticsAdapter = {
  */
 const MixpanelAdapter = {
   name: 'mixpanel',
+  initialize() {
+    void MixpanelAnalyticsAdapter.initialize();
+  },
 
-  identify(userId) {
-    // TODO: Phase 2에서 구현
-    // mixpanel.identify(userId);
-    logger.log('[Mixpanel] Identify:', userId);
+  identify(userId, traits = {}) {
+    MixpanelAnalyticsAdapter.identify(userId, traits);
   },
 
   track(event, properties = {}) {
-    // TODO: Phase 2에서 구현
-    // mixpanel.track(event, properties);
-    logger.log('[Mixpanel] Track:', event, properties);
+    MixpanelAnalyticsAdapter.track(event, properties);
   },
 
   setUserProperties(properties) {
-    // TODO: Phase 2에서 구현
-    // mixpanel.people.set(properties);
-    logger.log('[Mixpanel] User Properties:', properties);
+    for (const [key, value] of Object.entries(properties || {})) {
+      MixpanelAnalyticsAdapter.setUserProperty(key, value);
+    }
+  },
+
+  setUserProperty(key, value) {
+    MixpanelAnalyticsAdapter.setUserProperty(key, value);
+  },
+
+  incrementUserProperty(key, amount = 1) {
+    MixpanelAnalyticsAdapter.incrementUserProperty(key, amount);
   },
 
   reset() {
-    // TODO: Phase 2에서 구현
-    // mixpanel.reset();
-    logger.log('[Mixpanel] Reset');
+    MixpanelAnalyticsAdapter.reset();
   },
 };
 
@@ -84,6 +104,17 @@ const adapters = {
  */
 let currentAdapter = MockAnalyticsAdapter;
 
+function activateAdapter(adapter, type) {
+  currentAdapter = adapter;
+  try {
+    if (typeof currentAdapter.initialize === 'function') {
+      void currentAdapter.initialize();
+    }
+  } catch (error) {
+    logger.error(`[Analytics] Failed to initialize ${type} adapter:`, error);
+  }
+}
+
 /**
  * Analytics Adapter 설정
  * @param {'mock' | 'mixpanel'} type
@@ -92,9 +123,9 @@ export function setAnalyticsAdapter(type) {
   const adapter = adapters[type];
   if (!adapter) {
     logger.warn(`Unknown analytics adapter: ${type}, falling back to mock`);
-    currentAdapter = MockAnalyticsAdapter;
+    activateAdapter(MockAnalyticsAdapter, 'mock');
   } else {
-    currentAdapter = adapter;
+    activateAdapter(adapter, type);
   }
 }
 
@@ -103,7 +134,7 @@ export function setAnalyticsAdapter(type) {
  */
 export const analytics = {
   // 사용자 식별
-  identify: (userId) => currentAdapter.identify(userId),
+  identify: (userId, traits = {}) => currentAdapter.identify(userId, traits),
 
   // 이벤트 트래킹
   track: (event, properties) => currentAdapter.track(event, properties),
@@ -111,35 +142,60 @@ export const analytics = {
   // 사용자 속성 설정
   setUserProperties: (properties) => currentAdapter.setUserProperties(properties),
 
+  setUserProperty: (key, value) => {
+    if (typeof currentAdapter.setUserProperty === 'function') {
+      currentAdapter.setUserProperty(key, value);
+      return;
+    }
+    currentAdapter.setUserProperties({ [key]: value });
+  },
+
+  incrementUserProperty: (key, amount = 1) => {
+    if (typeof currentAdapter.incrementUserProperty === 'function') {
+      currentAdapter.incrementUserProperty(key, amount);
+      return;
+    }
+    logger.log('[Analytics] incrementUserProperty not supported by adapter:', currentAdapter.name);
+  },
+
   // 초기화 (로그아웃 시)
   reset: () => currentAdapter.reset(),
 
   // 사전 정의 이벤트
   events: {
-    // 인증
-    SIGN_UP: 'sign_up',
-    SIGN_IN: 'sign_in',
-    SIGN_OUT: 'sign_out',
+    APP_OPEN: 'app_open',
+    AUTH_SIGNUP: 'auth_signup',
+    AUTH_LOGIN: 'auth_login',
+    AUTH_LOGOUT: 'auth_logout',
+    ONBOARDING_STEP: 'onboarding_step',
+    ONBOARDING_COMPLETE: 'onboarding_complete',
+    ONBOARDING_SKIP: 'onboarding_skip',
+    ONBOARDING_MINI_CHECKIN: 'onboarding_mini_checkin',
+    DREAM_CREATE_START: 'dream_create_start',
+    DREAM_CREATE_COMPLETE: 'dream_create_complete',
+    DREAM_ANALYSIS_COMPLETE: 'dream_analysis_complete',
+    CHECKIN_START: 'checkin_start',
+    CHECKIN_STEP: 'checkin_step',
+    CHECKIN_COMPLETE: 'checkin_complete',
+    CHECKIN_ABANDON: 'checkin_abandon',
+    FORECAST_VIEW: 'forecast_view',
+    FORECAST_FEEDBACK: 'forecast_feedback',
+    REPORT_VIEW: 'report_view',
+    REPORT_SHARE: 'report_share',
+    NOTIFICATION_CLICK: 'notification_click',
+    SETTINGS_CHANGE: 'settings_change',
 
-    // 꿈 기록
-    DREAM_CREATED: 'dream_created',
-    DREAM_ANALYZED: 'dream_analyzed',
-    VOICE_INPUT_USED: 'voice_input_used',
-
-    // 체크인
-    CHECK_IN_COMPLETED: 'check_in_completed',
-    CHECK_IN_SKIPPED: 'check_in_skipped',
-
-    // 예보
-    FORECAST_VIEWED: 'forecast_viewed',
-    FORECAST_ACCURACY_RECORDED: 'forecast_accuracy_recorded',
-
-    // 기타
-    SYMBOL_VIEWED: 'symbol_viewed',
-    REPORT_VIEWED: 'report_viewed',
-    ONBOARDING_COMPLETED: 'onboarding_completed',
-    NOTIFICATION_ENABLED: 'notification_enabled',
-    FEATURE_FLAG_TOGGLED: 'feature_flag_toggled',
+    // Legacy aliases
+    SIGN_UP: 'auth_signup',
+    SIGN_IN: 'auth_login',
+    SIGN_OUT: 'auth_logout',
+    DREAM_CREATED: 'dream_create_complete',
+    DREAM_ANALYZED: 'dream_analysis_complete',
+    CHECK_IN_COMPLETED: 'checkin_complete',
+    FORECAST_VIEWED: 'forecast_view',
+    FORECAST_ACCURACY_RECORDED: 'forecast_feedback',
+    REPORT_VIEWED: 'report_view',
+    ONBOARDING_COMPLETED: 'onboarding_complete',
   },
 };
 

@@ -1,12 +1,14 @@
 /**
  * useAuthStore 테스트
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useAuthStore from './useAuthStore';
+import analytics from '../lib/adapters/analytics';
 
 describe('useAuthStore', () => {
   beforeEach(() => {
     useAuthStore.getState().reset();
+    vi.restoreAllMocks();
   });
 
   it('should start unauthenticated', () => {
@@ -62,6 +64,32 @@ describe('useAuthStore', () => {
     expect(result.success).toBe(true);
     expect(useAuthStore.getState().isAuthenticated).toBe(true);
     expect(useAuthStore.getState().user.name).toBe('Test');
+  });
+
+  it('should track auth lifecycle analytics events', async () => {
+    const trackSpy = vi.spyOn(analytics, 'track');
+
+    await useAuthStore.getState().signUp({
+      email: 'metrics@example.com',
+      password: 'password123',
+      name: 'Metrics',
+    });
+
+    await useAuthStore.getState().signOut();
+    await useAuthStore.getState().signIn({
+      email: 'metrics@example.com',
+      password: 'password123',
+    });
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      analytics.events.AUTH_SIGNUP,
+      expect.objectContaining({ method: 'email' }),
+    );
+    expect(trackSpy.mock.calls.some(([eventName]) => eventName === analytics.events.AUTH_LOGOUT)).toBe(true);
+    expect(trackSpy).toHaveBeenCalledWith(
+      analytics.events.AUTH_LOGIN,
+      expect.objectContaining({ method: 'email' }),
+    );
   });
 
   it('should sign out', async () => {

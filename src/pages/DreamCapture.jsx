@@ -1,7 +1,7 @@
 /**
  * 꿈 기록 페이지
  */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   Moon, Mic, MicOff, Sparkles, X, ChevronDown, ChevronUp,
@@ -16,6 +16,7 @@ import useDreams from '../hooks/useDreams';
 import useVoiceInput from '../hooks/useVoiceInput';
 import { formatFriendlyDate } from '../lib/utils/date';
 import { getIntensityLabel } from '../lib/ai/analyzeDream';
+import analytics from '../lib/adapters/analytics';
 
 export default function DreamCapture() {
   const [searchParams] = useSearchParams();
@@ -36,6 +37,7 @@ export default function DreamCapture() {
   }, [dreamError, toast, clearDreamError]);
 
   const [content, setContent] = useState('');
+  const hasTrackedCreateStartRef = useRef(false);
 
   // URL에서 꿈 ID 확인 (lazy init)
   const initialDreamId = searchParams.get('id');
@@ -59,6 +61,14 @@ export default function DreamCapture() {
 
   const selectedDream = selectedDreamId ? getDreamById(selectedDreamId) : null;
 
+  const trackCreateStart = (inputMethod = 'text') => {
+    if (hasTrackedCreateStartRef.current) return;
+    analytics.track(analytics.events.DREAM_CREATE_START, {
+      input_method: inputMethod,
+    });
+    hasTrackedCreateStartRef.current = true;
+  };
+
   const handleSave = async () => {
     if (!content.trim()) {
       toast.warning('꿈 내용을 입력해주세요');
@@ -75,6 +85,7 @@ export default function DreamCapture() {
       toast.success('꿈이 기록되었습니다', 'AI가 분석 중이에요');
       setContent('');
       clearTranscript();
+      hasTrackedCreateStartRef.current = false;
       setSelectedDreamId(dream.id);
       setShowAnalysis(true);
     }
@@ -106,6 +117,7 @@ export default function DreamCapture() {
             <Textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              onFocus={() => trackCreateStart('text')}
               placeholder="꿈에서 본 것, 느낀 감정, 등장인물 등을 자유롭게 적어주세요..."
               rows={6}
               className="mb-4"
@@ -117,7 +129,10 @@ export default function DreamCapture() {
                 <Button
                   variant={isListening ? 'danger' : 'secondary'}
                   size="sm"
-                  onClick={toggleListening}
+                  onClick={() => {
+                    trackCreateStart('voice');
+                    toggleListening();
+                  }}
                 >
                   {isListening ? (
                     <>

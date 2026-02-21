@@ -1,13 +1,15 @@
 /**
  * 온보딩 페이지
  */
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Moon, Sparkles, Check, ChevronRight, Bell } from 'lucide-react';
 import { Button } from '../components/common';
 import useAuth from '../hooks/useAuth';
 import useNotifications from '../hooks/useNotifications';
 import useSettingsStore from '../store/useSettingsStore';
 import { loadSampleData } from '../lib/utils/sampleData';
+import analytics from '../lib/adapters/analytics';
+import { getTimestampMs } from '../lib/utils/date';
 
 const STEPS = [
   {
@@ -42,12 +44,28 @@ export default function Onboarding() {
   const [currentStep, setCurrentStep] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
   const [sampleStatus, setSampleStatus] = useState('idle');
+  const startedAtRef = useRef(0);
+  const trackedStepsRef = useRef(new Set());
 
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
 
+  useEffect(() => {
+    startedAtRef.current = getTimestampMs();
+  }, []);
+
+  useEffect(() => {
+    const stepNumber = currentStep + 1;
+    if (trackedStepsRef.current.has(stepNumber)) return;
+    trackedStepsRef.current.add(stepNumber);
+    analytics.track(analytics.events.ONBOARDING_STEP, { step: stepNumber });
+  }, [currentStep]);
+
   const handleNext = () => {
     if (isLastStep) {
+      analytics.track(analytics.events.ONBOARDING_COMPLETE, {
+        duration_sec: Math.max(1, Math.round((getTimestampMs() - startedAtRef.current) / 1000)),
+      });
       completeOnboarding();
     } else {
       setCurrentStep(currentStep + 1);
@@ -55,6 +73,9 @@ export default function Onboarding() {
   };
 
   const handleSkip = () => {
+    analytics.track(analytics.events.ONBOARDING_SKIP, {
+      step: currentStep + 1,
+    });
     completeOnboarding();
   };
 

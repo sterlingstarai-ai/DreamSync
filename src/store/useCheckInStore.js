@@ -7,6 +7,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { generateId } from '../lib/utils/id';
 import { getTodayString, getRecentDays, toDateString } from '../lib/utils/date';
 import { zustandStorage } from '../lib/adapters/storage';
+import analytics from '../lib/adapters/analytics';
 
 const MAX_CHECKINS = 365;
 
@@ -29,6 +30,7 @@ const useCheckInStore = create(
        * @param {string[]} params.events
        * @param {string} [params.note]
        * @param {Object} [params.sleep]
+       * @param {number} [params.durationSec]
        */
       addCheckIn: async ({
         userId,
@@ -38,6 +40,7 @@ const useCheckInStore = create(
         events,
         note,
         sleep,
+        durationSec,
       }) => {
         set({ isLoading: true, error: null });
 
@@ -46,7 +49,7 @@ const useCheckInStore = create(
 
         // 오늘 이미 체크인했으면 업데이트
         if (existingLog) {
-          return get().updateCheckIn(existingLog.id, {
+          const updated = get().updateCheckIn(existingLog.id, {
             condition,
             emotions,
             stressLevel,
@@ -54,6 +57,10 @@ const useCheckInStore = create(
             note,
             sleep,
           });
+          analytics.track(analytics.events.CHECKIN_COMPLETE, {
+            total_duration_sec: durationSec,
+          });
+          return updated;
         }
 
         const log = {
@@ -73,6 +80,11 @@ const useCheckInStore = create(
           logs: [log, ...state.logs].slice(0, MAX_CHECKINS),
           isLoading: false,
         }));
+
+        analytics.track(analytics.events.CHECKIN_COMPLETE, {
+          total_duration_sec: durationSec,
+        });
+        analytics.incrementUserProperty('total_checkins', 1);
 
         return log;
       },

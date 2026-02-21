@@ -110,6 +110,7 @@ export default function useCheckIn() {
     events,
     note,
     sleep,
+    durationSec,
   }) => {
     if (!userId) return null;
 
@@ -121,6 +122,7 @@ export default function useCheckIn() {
       events,
       note,
       sleep,
+      durationSec,
     });
   }, [userId, addCheckIn]);
 

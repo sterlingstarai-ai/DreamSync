@@ -10,6 +10,7 @@ import { analyzeDream } from '../lib/ai/analyzeDream';
 import { zustandStorage } from '../lib/adapters/storage';
 import logger from '../lib/utils/logger';
 import useSymbolStore from './useSymbolStore';
+import analytics from '../lib/adapters/analytics';
 
 const MAX_DREAMS = 500;
 
@@ -50,6 +51,12 @@ const useDreamStore = create(
           dreams: [dream, ...state.dreams].slice(0, MAX_DREAMS),
           isLoading: false,
         }));
+
+        analytics.track(analytics.events.DREAM_CREATE_COMPLETE, {
+          content_length: content.length,
+          has_voice: Boolean(voiceUrl),
+        });
+        analytics.incrementUserProperty('total_dreams', 1);
 
         // 자동 분석
         if (autoAnalyze) {
@@ -96,6 +103,11 @@ const useDreamStore = create(
               analysis.symbols,
             );
           }
+
+          analytics.track(analytics.events.DREAM_ANALYSIS_COMPLETE, {
+            symbols_count: Array.isArray(analysis?.symbols) ? analysis.symbols.length : 0,
+            emotions_count: Array.isArray(analysis?.emotions) ? analysis.emotions.length : 0,
+          });
         } else {
           set({
             isAnalyzing: false,

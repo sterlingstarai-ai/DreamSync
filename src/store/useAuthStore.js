@@ -6,6 +6,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { generateId } from '../lib/utils/id';
 import { zustandStorage } from '../lib/adapters/storage';
+import analytics from '../lib/adapters/analytics';
 
 const MIN_PASSWORD_LENGTH = 6;
 const PASSWORD_HASH_VERSION = 1;
@@ -22,6 +23,19 @@ const defaultSettings = {
 
 function normalizeEmail(email = '') {
   return String(email || '').trim().toLowerCase();
+}
+
+function getPlatform() {
+  if (typeof window === 'undefined') return 'web';
+  const protocol = window.location?.protocol || '';
+  if (protocol === 'capacitor:') return 'ios';
+  const userAgent = typeof navigator !== 'undefined' ? (navigator.userAgent || '') : '';
+  if (/android/i.test(userAgent)) return 'android';
+  return 'web';
+}
+
+function getAuthMethod(email = '') {
+  return normalizeEmail(email).startsWith('guest@') ? 'guest' : 'email';
 }
 
 function createSalt() {
@@ -122,6 +136,24 @@ const useAuthStore = create(
           isLoading: false,
         });
 
+        analytics.identify(user.id, {
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
+          platform: getPlatform(),
+          appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
+        });
+        analytics.setUserProperties({
+          $name: user.name,
+          $email: user.email,
+          signup_date: user.createdAt,
+          platform: getPlatform(),
+          onboarding_completed: false,
+        });
+        analytics.track(analytics.events.AUTH_SIGNUP, {
+          method: getAuthMethod(user.email),
+        });
+
         return { success: true, user };
       },
 
@@ -160,6 +192,16 @@ const useAuthStore = create(
             isAuthenticated: true,
             isLoading: false,
           });
+          analytics.identify(upgraded.id, {
+            name: upgraded.name,
+            email: upgraded.email,
+            createdAt: upgraded.createdAt,
+            platform: getPlatform(),
+            appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
+          });
+          analytics.track(analytics.events.AUTH_LOGIN, {
+            method: getAuthMethod(upgraded.email),
+          });
           return { success: true, user: upgraded };
         }
 
@@ -172,6 +214,17 @@ const useAuthStore = create(
         set({
           isAuthenticated: true,
           isLoading: false,
+        });
+
+        analytics.identify(currentUser.id, {
+          name: currentUser.name,
+          email: currentUser.email,
+          createdAt: currentUser.createdAt,
+          platform: getPlatform(),
+          appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
+        });
+        analytics.track(analytics.events.AUTH_LOGIN, {
+          method: getAuthMethod(currentUser.email),
         });
 
         return { success: true, user: currentUser };
@@ -191,6 +244,9 @@ const useAuthStore = create(
           // user는 유지 (다음 로그인 시 복원)
         });
 
+        analytics.track(analytics.events.AUTH_LOGOUT);
+        analytics.reset();
+
         return { success: true };
       },
 
@@ -208,6 +264,9 @@ const useAuthStore = create(
             ...updates,
           },
         });
+        if (updates?.name) {
+          analytics.setUserProperty('$name', updates.name);
+        }
       },
 
       /**
@@ -242,6 +301,7 @@ const useAuthStore = create(
             onboardingCompleted: true,
           },
         });
+        analytics.setUserProperty('onboarding_completed', true);
       },
 
       /**

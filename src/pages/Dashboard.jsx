@@ -1,7 +1,7 @@
 /**
  * 대시보드 (홈) 페이지
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Moon, Sun, Sparkles, TrendingUp, Calendar,
@@ -27,9 +27,11 @@ import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast
 import { detectPatternAlerts } from '../lib/services/patternAlertService';
 import { buildCoachPlan, getCoachPlanCompletion } from '../lib/services/coachPlanService';
 import { buildGoalRecoveryPlan } from '../lib/services/goalRecoveryService';
+import analytics from '../lib/adapters/analytics';
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const trackedForecastDateRef = useRef(null);
   const user = useAuthStore(useShallow(state => state.user));
   const { todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
   const {
@@ -148,6 +150,15 @@ export default function Dashboard() {
       createTodayForecast();
     }
   }, [todayForecast, isGenerating, forecastError, hasMinimumData, createTodayForecast]);
+
+  useEffect(() => {
+    if (!todayForecast) return;
+    if (trackedForecastDateRef.current === todayForecast.date) return;
+    analytics.track(analytics.events.FORECAST_VIEW, {
+      confidence: todayForecast.prediction?.confidence ?? calculatedConfidence,
+    });
+    trackedForecastDateRef.current = todayForecast.date;
+  }, [todayForecast, calculatedConfidence]);
 
   return (
     <>

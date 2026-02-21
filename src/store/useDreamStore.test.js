@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useDreamStore from './useDreamStore';
 import useSymbolStore from './useSymbolStore';
+import analytics from '../lib/adapters/analytics';
 
 // Mock analyzeDream
 vi.mock('../lib/ai/analyzeDream', () => ({
@@ -24,6 +25,7 @@ vi.mock('../lib/ai/analyzeDream', () => ({
 describe('useDreamStore', () => {
   beforeEach(() => {
     useDreamStore.getState().reset();
+    vi.restoreAllMocks();
   });
 
   it('should start with empty state', () => {
@@ -49,6 +51,33 @@ describe('useDreamStore', () => {
     const state = useDreamStore.getState();
     expect(state.dreams).toHaveLength(1);
     expect(state.dreams[0].id).toBe(dream.id);
+  });
+
+  it('should track dream creation and analysis events', async () => {
+    const trackSpy = vi.spyOn(analytics, 'track');
+    const dream = await useDreamStore.getState().addDream({
+      content: '꿈에서 거대한 파도를 봤다',
+      userId: 'user-1',
+      autoAnalyze: false,
+    });
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      analytics.events.DREAM_CREATE_COMPLETE,
+      expect.objectContaining({
+        content_length: '꿈에서 거대한 파도를 봤다'.length,
+        has_voice: false,
+      }),
+    );
+
+    await useDreamStore.getState().analyzeDream(dream.id);
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      analytics.events.DREAM_ANALYSIS_COMPLETE,
+      expect.objectContaining({
+        symbols_count: 1,
+        emotions_count: 1,
+      }),
+    );
   });
 
   it('should find dream by id', async () => {
