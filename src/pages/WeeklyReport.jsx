@@ -1,7 +1,7 @@
 /**
  * 주간 리포트 페이지
  */
-import { useMemo, useCallback, useEffect } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Moon, Calendar, TrendingUp, TrendingDown,
@@ -24,7 +24,7 @@ import analytics from '../lib/adapters/analytics';
 export default function WeeklyReport() {
   const navigate = useNavigate();
   const toast = useToast();
-  const user = useAuthStore(state => state.user);
+  const userId = useAuthStore(state => state.user?.id || null);
   const {
     dreams,
     recentDreams,
@@ -50,8 +50,9 @@ export default function WeeklyReport() {
   const getSuggestedGoals = useGoalStore(state => state.getSuggestedGoals);
   const applySuggestedGoals = useGoalStore(state => state.applySuggestedGoals);
   const getRecentPlanStats = useCoachPlanStore(state => state.getRecentPlanStats);
+  const trackedReportWeekRef = useRef(null);
   const coachPlanStats = useMemo(() => {
-    if (!user?.id) {
+    if (!userId) {
       return {
         days: 7,
         activeDays: 0,
@@ -60,17 +61,20 @@ export default function WeeklyReport() {
         completionRate: 0,
       };
     }
-    return getRecentPlanStats(user.id, 7);
-  }, [user, getRecentPlanStats]);
+    return getRecentPlanStats(userId, 7);
+  }, [userId, getRecentPlanStats]);
 
   const activeError = dreamError || checkInError || forecastError;
 
   const weekDays = useMemo(() => getRecentDays(7), []);
 
   useEffect(() => {
-    if (!weekDays.length) return;
+    const weekStart = weekDays[0];
+    if (!weekStart) return;
+    if (trackedReportWeekRef.current === weekStart) return;
+    trackedReportWeekRef.current = weekStart;
     analytics.track(analytics.events.REPORT_VIEW, {
-      week: weekDays[0],
+      week: weekStart,
     });
   }, [weekDays]);
 
@@ -111,18 +115,18 @@ export default function WeeklyReport() {
   const topSymbols = symbols.slice(0, 5);
 
   const goalProgress = useMemo(() => {
-    if (!user?.id) {
+    if (!userId) {
       return {
         goals: {},
         metrics: {},
         progress: {},
       };
     }
-    return getWeeklyProgress(user.id, {
+    return getWeeklyProgress(userId, {
       logs: recentLogs,
       dreams: recentDreams,
     });
-  }, [user, getWeeklyProgress, recentLogs, recentDreams]);
+  }, [userId, getWeeklyProgress, recentLogs, recentDreams]);
 
   const achievedGoalCount = useMemo(() => {
     const progressValues = Object.values(goalProgress.progress || {});
@@ -130,7 +134,7 @@ export default function WeeklyReport() {
   }, [goalProgress]);
 
   const adjustGoal = useCallback((goalKey, delta) => {
-    if (!user?.id) return;
+    if (!userId) return;
     const current = goalProgress.goals?.[goalKey];
     if (typeof current !== 'number') return;
 
@@ -140,24 +144,24 @@ export default function WeeklyReport() {
       ? Math.max(4, Math.min(10, Math.round(rawNext * 10) / 10))
       : Math.max(1, Math.round(rawNext));
 
-    updateGoals(user.id, {
+    updateGoals(userId, {
       ...goalProgress.goals,
       [goalKey]: next,
     });
-  }, [user, goalProgress, updateGoals]);
+  }, [userId, goalProgress, updateGoals]);
 
   const goalSuggestion = useMemo(() => {
-    if (!user?.id) return null;
-    return getSuggestedGoals(user.id, {
+    if (!userId) return null;
+    return getSuggestedGoals(userId, {
       logs,
       dreams,
       lookbackDays: 14,
     });
-  }, [user, getSuggestedGoals, logs, dreams]);
+  }, [userId, getSuggestedGoals, logs, dreams]);
 
   const applyRecommendedGoals = useCallback(() => {
-    if (!user?.id) return;
-    const applied = applySuggestedGoals(user.id, {
+    if (!userId) return;
+    const applied = applySuggestedGoals(userId, {
       logs,
       dreams,
       lookbackDays: 14,
@@ -165,7 +169,7 @@ export default function WeeklyReport() {
     if (applied) {
       toast.success('추천 목표를 적용했어요');
     }
-  }, [user, logs, dreams, applySuggestedGoals, toast]);
+  }, [userId, logs, dreams, applySuggestedGoals, toast]);
 
   // 공유 텍스트 생성
   const buildShareText = useCallback(() => {
