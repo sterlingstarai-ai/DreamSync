@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import useGoalStore, { DEFAULT_WEEKLY_GOALS } from './useGoalStore';
+import { getDaysAgo } from '../lib/utils/date';
 
 describe('useGoalStore', () => {
   beforeEach(() => {
@@ -27,15 +28,15 @@ describe('useGoalStore', () => {
   it('calculates weekly progress from logs and dreams', () => {
     const progress = useGoalStore.getState().getWeeklyProgress('user-1', {
       logs: [
-        { date: '2026-02-17', sleep: { duration: 480 } },
-        { date: '2026-02-16', sleep: { duration: 420 } },
-        { date: '2026-02-15', sleep: { duration: 360 } },
+        { date: getDaysAgo(1), sleep: { duration: 480 } },
+        { date: getDaysAgo(2), sleep: { duration: 420 } },
+        { date: getDaysAgo(3), sleep: { duration: 360 } },
       ],
       dreams: [
-        { date: '2026-02-17' },
-        { date: '2026-02-16' },
-        { date: '2026-02-15' },
-        { date: '2026-02-14' },
+        { date: getDaysAgo(0) },
+        { date: getDaysAgo(1) },
+        { date: getDaysAgo(2) },
+        { date: getDaysAgo(3) },
       ],
     });
 
@@ -55,22 +56,22 @@ describe('useGoalStore', () => {
     const suggestion = useGoalStore.getState().getSuggestedGoals('user-1', {
       lookbackDays: 14,
       logs: [
-        { date: '2026-02-17', sleep: { duration: 480 } },
-        { date: '2026-02-16', sleep: { duration: 450 } },
-        { date: '2026-02-15', sleep: { duration: 420 } },
-        { date: '2026-02-14', sleep: { duration: 480 } },
-        { date: '2026-02-13', sleep: { duration: 450 } },
-        { date: '2026-02-12', sleep: { duration: 420 } },
-        { date: '2026-02-11', sleep: { duration: 450 } },
-        { date: '2026-02-10', sleep: { duration: 480 } },
+        { date: getDaysAgo(1), sleep: { duration: 480 } },
+        { date: getDaysAgo(2), sleep: { duration: 450 } },
+        { date: getDaysAgo(3), sleep: { duration: 420 } },
+        { date: getDaysAgo(4), sleep: { duration: 480 } },
+        { date: getDaysAgo(5), sleep: { duration: 450 } },
+        { date: getDaysAgo(6), sleep: { duration: 420 } },
+        { date: getDaysAgo(7), sleep: { duration: 450 } },
+        { date: getDaysAgo(8), sleep: { duration: 480 } },
       ],
       dreams: [
-        { date: '2026-02-17' },
-        { date: '2026-02-16' },
-        { date: '2026-02-15' },
-        { date: '2026-02-14' },
-        { date: '2026-02-13' },
-        { date: '2026-02-12' },
+        { date: getDaysAgo(1) },
+        { date: getDaysAgo(2) },
+        { date: getDaysAgo(3) },
+        { date: getDaysAgo(4) },
+        { date: getDaysAgo(5) },
+        { date: getDaysAgo(6) },
       ],
     });
 
@@ -85,8 +86,8 @@ describe('useGoalStore', () => {
   it('applies suggested goals', () => {
     const applied = useGoalStore.getState().applySuggestedGoals('user-1', {
       lookbackDays: 14,
-      logs: [{ date: '2026-02-17', sleep: { duration: 420 } }],
-      dreams: [{ date: '2026-02-17' }],
+      logs: [{ date: getDaysAgo(1), sleep: { duration: 420 } }],
+      dreams: [{ date: getDaysAgo(1) }],
     });
 
     const goals = useGoalStore.getState().getGoals('user-1');
