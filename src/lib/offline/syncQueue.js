@@ -10,17 +10,21 @@ import storage from '../adapters/storage';
 
 const QUEUE_KEY = 'sync_queue';
 
-/** @type {{ items: Array, isOnline: boolean, listeners: Set }} */
+/** @type {{ items: Array, isOnline: boolean, listeners: Set<Function>, initialized: boolean, networkListener: any }} */
 const state = {
   items: [],
   isOnline: true,
   listeners: new Set(),
+  initialized: false,
+  networkListener: null,
 };
 
 /**
  * 큐 초기화 - 앱 시작 시 호출
  */
 export async function initSyncQueue() {
+  if (state.initialized) return;
+
   // 저장된 큐 로드
   const saved = await storage.get(QUEUE_KEY);
   if (Array.isArray(saved)) {
@@ -31,7 +35,12 @@ export async function initSyncQueue() {
   const status = await Network.getStatus();
   state.isOnline = status.connected;
 
-  Network.addListener('networkStatusChange', async (newStatus) => {
+  // 온라인 상태에서 대기 큐가 있으면 즉시 플러시
+  if (state.isOnline && state.items.length > 0) {
+    await flush();
+  }
+
+  state.networkListener = await Network.addListener('networkStatusChange', async (newStatus) => {
     const wasOffline = !state.isOnline;
     state.isOnline = newStatus.connected;
 
@@ -42,6 +51,19 @@ export async function initSyncQueue() {
 
     notify();
   });
+
+  state.initialized = true;
+}
+
+/**
+ * 큐 정리 - 앱 종료/재초기화 시 리스너 해제
+ */
+export async function disposeSyncQueue() {
+  if (state.networkListener && typeof state.networkListener.remove === 'function') {
+    await state.networkListener.remove();
+  }
+  state.networkListener = null;
+  state.initialized = false;
 }
 
 /**
@@ -70,12 +92,16 @@ export async function enqueue({ type, payload }) {
   }
 }
 
+let isFlushing = false;
+
 /**
  * 큐 플러시 - 모든 대기 중인 작업 실행
  * Phase 2: 여기에 Supabase 동기화 로직 추가
  */
 async function flush() {
-  if (state.items.length === 0) return;
+  if (isFlushing || state.items.length === 0) return;
+  isFlushing = true;
+  try {
 
   const pending = [...state.items];
   const failed = [];
@@ -95,6 +121,9 @@ async function flush() {
   state.items = failed;
   await persist();
   notify();
+  } finally {
+    isFlushing = false;
+  }
 }
 
 /**

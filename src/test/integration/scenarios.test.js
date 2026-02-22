@@ -177,7 +177,12 @@ describe('시나리오: 오프라인 전체 플로우 (mock AI)', () => {
       expect(useDreamStore.getState().getDreamById(dream.id).analysis).not.toBeNull();
     });
 
-    // 2. 심볼 동기화 확인
+    // 2. 심볼 동기화 (Fix 11: 훅 레벨에서 수동 호출)
+    const analyzedDream = useDreamStore.getState().getDreamById(dream.id);
+    useSymbolStore.getState().syncSymbolsFromAnalysis(
+      TEST_USER, dream.id, analyzedDream.analysis.symbols
+    );
+
     const symbols = useSymbolStore.getState().getUserSymbols(TEST_USER);
     expect(symbols.length).toBeGreaterThanOrEqual(1);
 

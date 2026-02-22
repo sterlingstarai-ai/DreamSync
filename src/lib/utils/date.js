@@ -171,3 +171,11 @@ export function formatRelativeDate(isoString) {
 export function formatShortDate(dateString) {
   return format(parseISO(dateString), 'M/d');
 }
+
+/**
+ * 현재 epoch milliseconds
+ * @returns {number}
+ */
+export function getTimestampMs() {
+  return Date.now();
+}

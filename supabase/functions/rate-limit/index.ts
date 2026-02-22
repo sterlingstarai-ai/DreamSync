@@ -96,10 +96,17 @@ export function resetStore(): void {
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Rate-Limit-Secret',
 };
 
-Deno.serve(async (req: Request): Promise<Response> => {
+function hasValidSharedSecret(req: Request): boolean {
+  const expected = Deno.env.get('RATE_LIMIT_SHARED_SECRET');
+  if (!expected) return true;
+  const received = req.headers.get('X-Rate-Limit-Secret');
+  return received === expected;
+}
+
+export async function handleRequest(req: Request): Promise<Response> {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
@@ -107,6 +114,13 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'POST only' }), {
       status: 405,
+      headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
+    });
+  }
+
+  if (!hasValidSharedSecret(req)) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+      status: 401,
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
@@ -133,4 +147,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
       headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
     });
   }
-});
+}
+
+if (import.meta.main) {
+  Deno.serve(handleRequest);
+}

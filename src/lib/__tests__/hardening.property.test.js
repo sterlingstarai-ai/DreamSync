@@ -24,9 +24,10 @@ import {
 } from '../scoring/confidence';
 
 import { estimateSleepQuality, safeParseSleepSummary, WearableSleepSummarySchema } from '../health/schemas';
-import { DEFAULT_FEATURE_FLAGS, isFlagAvailable, FEATURE_FLAG_INFO } from '../../constants/featureFlags';
+import { DEFAULT_FLAGS, DEFAULT_FEATURE_FLAGS, isFlagAvailable, FEATURE_FLAG_INFO } from '../../constants/featureFlags';
 import useSleepStore from '../../store/useSleepStore';
 import { DreamAnalysisSchema, ForecastPredictionSchema, safeParse } from '../ai/schemas';
+import { maskDreamContent, maskSensitiveFields } from '../utils/mask';
 
 // ─── Confidence 계산 프로퍼티 ─────────────────────────────────
 
@@ -322,6 +323,8 @@ describe('Property: Zod schema parsing never crashes', () => {
         fc.date({ min: new Date('2020-01-01'), max: new Date('2030-12-31') }),
         fc.integer({ min: 0, max: 900 }),
         (date, sleepMins) => {
+          // fc.date can produce NaN dates with certain seeds — skip
+          if (isNaN(date.getTime())) return;
           const dateStr = date.toISOString().split('T')[0];
           const input = {
             date: dateStr,
@@ -462,5 +465,98 @@ describe('Mutation-hardening: Store migration safety', () => {
     const migrated = { ...persisted };
     expect(migrated.flags.healthkit).toBe(true);
     expect(migrated.flags.uhs).toBe(false);
+  });
+});
+
+// ─── Flag-off smoke test ─────────────────────────────────────
+
+describe('Flag-off smoke test', () => {
+  it('healthkit flag off: DEFAULT_FLAGS and DEFAULT_FEATURE_FLAGS both false', () => {
+    expect(DEFAULT_FLAGS.healthkit).toBe(false);
+    expect(DEFAULT_FEATURE_FLAGS.healthkit).toBe(false);
+  });
+
+  it('all gated flags are false in both flag sources', () => {
+    const GATED = ['healthkit', 'saju', 'uhs', 'b2b', 'edgeAI', 'devMode'];
+    for (const flag of GATED) {
+      expect(DEFAULT_FLAGS[flag]).toBe(false);
+      expect(DEFAULT_FEATURE_FLAGS[flag]).toBe(false);
+    }
+  });
+
+  it('FEATURE_FLAG_INFO contains no requiresPlatform that blocks web', () => {
+    for (const [key, info] of Object.entries(FEATURE_FLAG_INFO)) {
+      // null means available on all platforms including web
+      if (info.requiresPlatform !== null) {
+        // If a flag requires a specific platform, it should still be queryable
+        expect(isFlagAvailable(key, info.requiresPlatform)).toBe(true);
+      }
+      // All flags should be available on web (requiresPlatform is null for all current flags)
+      expect(isFlagAvailable(key, 'web')).toBe(true);
+    }
+  });
+});
+
+// ─── PII leak regression test ────────────────────────────────
+
+describe('PII leak regression', () => {
+  it('maskDreamContent never returns raw content', () => {
+    fc.assert(
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 5000 }),
+        (content) => {
+          const masked = maskDreamContent(content);
+          // masked should never contain the original content (unless very short)
+          if (content.length > 10) {
+            expect(masked).not.toContain(content);
+          }
+          // should always be in format [dream: N chars] or [empty]
+          expect(masked).toMatch(/^\[(dream: \d+ chars|empty)\]$/);
+        }
+      ),
+      { numRuns: 100 }
+    );
+  });
+
+  it('maskSensitiveFields strips all sensitive keys', () => {
+    const SENSITIVE_KEYS = [
+      'content', 'dreamContent', 'text', 'interpretation',
+      'meaning', 'personalMeaning', 'emotions', 'emotionDetails',
+      'feelings', 'note', 'healthData', 'sleepData', 'hrvData',
+    ];
+
+    const input = {};
+    for (const key of SENSITIVE_KEYS) {
+      input[key] = 'sensitive raw data that should be masked';
+    }
+    input.safeKey = 'this should pass through';
+
+    const masked = maskSensitiveFields(input);
+
+    // All sensitive keys should be masked (not contain original value)
+    for (const key of SENSITIVE_KEYS) {
+      expect(masked[key]).not.toBe('sensitive raw data that should be masked');
+    }
+    // Safe key should pass through
+    expect(masked.safeKey).toBe('this should pass through');
+  });
+
+  it('audit-log SENSITIVE_FIELDS list covers dream/health raw fields', () => {
+
+    const criticalPII = {
+      content: '어젯밤 바다에서 수영하는 꿈',
+      dreamContent: '하늘을 나는 꿈',
+      interpretation: '이 꿈은 무의식의 신호',
+      healthData: { hrv: 45, steps: 10000 },
+      sleepData: { rem: 90, deep: 120 },
+      hrvData: [45, 48, 52],
+    };
+
+    const masked = maskSensitiveFields(criticalPII);
+
+    // None of the raw values should survive masking
+    for (const key of Object.keys(criticalPII)) {
+      expect(masked[key]).not.toEqual(criticalPII[key]);
+    }
   });
 });

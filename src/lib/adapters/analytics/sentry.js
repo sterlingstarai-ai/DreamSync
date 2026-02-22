@@ -33,7 +33,10 @@ async function initialize() {
     Sentry.init({
       dsn,
       environment: import.meta.env.MODE,
+      release: `dreamsync@${import.meta.env.VITE_APP_VERSION || '0.0.1'}`,
       tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
+      replaysSessionSampleRate: import.meta.env.PROD ? 0.01 : 0,
+      replaysOnErrorSampleRate: 1.0,
       beforeSend(event) {
         // 민감 데이터 필터링
         return sanitizeEvent(event);
@@ -108,6 +111,11 @@ function sanitizeBreadcrumb(breadcrumb) {
  */
 function setUser(user) {
   if (!isInitialized || !Sentry) return;
+
+  if (!user?.id) {
+    Sentry.setUser(null);
+    return;
+  }
 
   Sentry.setUser({
     id: user.id,

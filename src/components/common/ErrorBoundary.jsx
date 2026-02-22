@@ -5,6 +5,7 @@
 import { Component } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import logger from '../../lib/utils/logger';
+import SentryAdapter from '../../lib/adapters/analytics/sentry';
 
 export default class ErrorBoundary extends Component {
   constructor(props) {
@@ -18,6 +19,9 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     logger.error('[ErrorBoundary]', error, errorInfo);
+    SentryAdapter.captureException(error, {
+      componentStack: errorInfo?.componentStack,
+    });
   }
 
   handleReset = () => {

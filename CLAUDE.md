@@ -8,7 +8,7 @@
 
 - **타입**: React PWA + Capacitor 네이티브 앱 (iOS/Android)
 - **버전**: 0.0.1
-- **상태**: Phase 1-4 + Phase 2 웨어러블 구현 완료 (204 tests, 22 files, 0 lint errors)
+- **상태**: Phase 1-4 + Phase 2 웨어러블 + Edge Function + Release Hardening 완료 (240 tests, 23 files, 0 lint errors)
 - **배포**: https://dreamsync-app.vercel.app
 - **GitHub**: https://github.com/sterlingstarai-ai/DreamSync
 
@@ -69,11 +69,13 @@ src/
 ├── hooks/             # useAuth, useDreams, useCheckIn, useForecast, useSymbols, useFeatureFlags, useVoiceInput, useNotifications, useHealthKit, useNetworkStatus
 ├── lib/
 │   ├── adapters/      # storage, ai, analytics, api (Adapter 패턴)
+│   │   └── ai/        # edge.js (Edge Function adapter), edge.test.js
 │   ├── ai/            # schemas, mock, service, analyzeDream, generateForecast
 │   ├── health/        # healthkit (HealthKit/Health Connect 연동)
 │   ├── scoring/       # confidence, uhs (Confidence/UHS 점수 계산)
 │   ├── offline/       # syncQueue (오프라인 동기화 큐)
-│   ├── utils/         # date, error, id
+│   ├── utils/         # date, error, id, logger, mask
+│   ├── __tests__/     # hardening.property.test.js (fast-check)
 │   ├── capacitor.js
 │   └── storage.js
 ├── store/             # useAuthStore, useDreamStore, useCheckInStore, useForecastStore, useSymbolStore, useFeatureFlagStore, useSettingsStore
@@ -88,6 +90,11 @@ public/
 ios/
 android/
 .github/
+supabase/
+├── functions/
+│   ├── ai-proxy/      # index.ts (메인 프록시), schemas.ts (요청/응답 검증)
+│   ├── rate-limit/    # index.ts (분당/일당 제한), logic.test.ts (Deno 테스트)
+│   └── audit-log/     # index.ts (메타데이터 로깅), audit.test.ts (Deno 테스트)
 ```
 
 ## 자주 쓰는 명령어
@@ -95,6 +102,8 @@ android/
 ```bash
 npm run dev          # 로컬 개발 서버
 npm run build        # 프로덕션 빌드
+npm run verify       # lint + typecheck + build + test (CI 게이트)
+npm run test:repeat  # 3회 반복 실행 (플래키 검출)
 npm run cap:sync     # 빌드 + Capacitor 동기화
 npm run cap:ios      # 빌드 + iOS Xcode 열기
 npm run cap:android  # 빌드 + Android Studio 열기
@@ -293,6 +302,113 @@ npm run cap:android  # 빌드 + Android Studio 열기
 - useSleepStore (11 tests) - CRUD, 소스 우선순위, 90일 제한, 커버리지
 - Confidence 웨어러블 연동 (2 tests)
 
+### 2026-02-04: Edge Function 스켈레톤 구현
+
+#### AI 프록시 (`supabase/functions/ai-proxy/`)
+- `schemas.ts` — TypeScript 인라인 검증 (Zod 미러, Deno 콜드스타트 최소화)
+  - `validateAnalyzeDreamRequest`, `validateForecastRequest` (요청 검증)
+  - `validateAnalysisResponse`, `validateForecastResponse` (응답 검증)
+- `index.ts` — 메인 프록시 핸들러
+  - CORS preflight, Bearer 토큰 확인 (JWT 검증은 TODO)
+  - `handleAnalyzeDream` / `handleGenerateForecast` 스텁 (스키마 통과 하드코딩)
+  - `ANTHROPIC_API_KEY`는 `Deno.env.get()`으로 읽되 미사용 (TODO 마크)
+  - audit-log fire-and-forget 호출 + SHA-256 content hash
+
+#### Rate Limit (`supabase/functions/rate-limit/`)
+- `index.ts` — userId 기준 인메모리 Map
+  - 분당 10회, 일당 100회 제한
+  - `checkRateLimit()` export (테스트 가능)
+  - 프로덕션은 KV/Redis 전환 예정
+- `logic.test.ts` — Deno 테스트 5개 (윈도우 리셋, 사용자 격리 등)
+
+#### Audit Log (`supabase/functions/audit-log/`)
+- `index.ts` — 호출 메타데이터만 저장 (원문 절대 금지)
+  - `stripSensitiveFields()` — 14개 민감 키 자동 strip + 경고
+  - ALLOWED_FIELDS 화이트리스트만 기록
+  - Phase 2: `supabase.from('audit_logs').insert()` 전환 예정
+- `audit.test.ts` — Deno 테스트 4개 (민감 필드 strip, 전수 감지 등)
+
+#### 클라이언트 Edge Adapter (`src/lib/adapters/ai/edge.js`)
+- fetch → Edge Function 프록시 호출
+- 429 (rate limit) → AI_RATE_LIMIT 에러 (fallback 안 함, 서버 정책 존중)
+- 네트워크 에러 → mock fallback (최대 5회, 초과 시 AI_UNAVAILABLE)
+- 성공 시 클라이언트 측 Zod 스키마 재검증
+- `maskDreamContent()`로 로그에 dream 원문 노출 0
+- 15초 AbortController 타임아웃
+- `edge.test.js` — Vitest 계약 테스트 6개
+
+#### 보안 원칙 달성
+- `ANTHROPIC_API_KEY`에 `VITE_` 접두사 없음 → 클라이언트 번들 노출 0
+- `grep -rE 'sk-ant' dist/` → 0 hits
+- audit-log에 dream content 원문 저장 0
+- rate limit은 서버사이드 전용
+
+### 2026-02-04: Release Hardening (Phase 0-4 완료)
+
+#### 프로퍼티/뮤테이션 테스트 (36 tests in hardening.property.test.js)
+- `src/lib/__tests__/hardening.property.test.js` — fast-check 기반
+  - Confidence 스코어링 불변 (6 property tests, 200+ random inputs)
+  - Mutation-hardening 경계값 (3 tests)
+  - estimateSleepQuality 범위 불변 (3 property tests)
+  - Feature flag 기본값 검증 (9 tests)
+  - Zod 스키마 crash-free (4 property tests, 200+ random inputs)
+  - useSleepStore 소스 우선순위 (3 property tests)
+  - Storage 마이그레이션 안전성 (2 tests)
+  - Flag-off smoke test (3 tests) — DEFAULT_FLAGS/DEFAULT_FEATURE_FLAGS 이중 검증
+  - PII leak regression (3 tests) — maskDreamContent 100 runs, maskSensitiveFields 13키 strip
+
+#### 뮤테이션 커버리지
+- 6개 핵심 모듈 전수 커버: confidence, estimateSleepQuality, featureFlags, Zod 파싱, useSleepStore, migration
+- 17 mutants, 0 survivors, 100% kill rate (MUTATION_BASELINE.md)
+
+#### 퍼징 베이스라인
+- ~1,400+ random inputs across all properties
+- 0 crashes (NaN date 이슈 1건 발견 및 수정)
+- 0 범위 위반, 0 flag-off 위반 (FUZZ_BASELINE.md)
+
+#### 버그 수정 (HARDENING_PROGRESS.md)
+1. `fc.date()` NaN → `toISOString()` RangeError — `isNaN(date.getTime())` guard
+2. `initSyncQueue` 복원 후 flush 누락 — 온라인 시 즉시 `flush()` 호출
+
+#### CI 강화
+- `npm run test:repeat` — 3회 연속 vitest (--retry 0)
+- `.github/workflows/ci.yml` — Flaky guard 스텝 추가
+- 3x repeat: 240 tests × 3 = 0 failures
+
+#### 릴리스 게이트 자동화
+- `scripts/release-gate.sh` — 5개 게이트 자동 실행 (verify + secret scan + PII scan + flag check + N-repeat)
+- `--repeat N` 인자 지원 (기본 20)
+
+#### 디바이스 테스트 매트릭스
+- TESTPLAN_DEVICE_MATRIX.md — iOS 2버전, Android 3버전, Web 5브라우저 조합
+- 26개 시나리오 (핵심 플로우, 권한, 네트워크, 생명주기, 접근성)
+- TESTRUN_LOG_TEMPLATE.md — 재현 가능한 테스트 실행 기록 템플릿
+
+#### 최종 게이트 지표
+| 지표 | 값 |
+|------|-----|
+| Tests | 240 (23 files) |
+| Mutation survivors | 0/17 |
+| Fuzz crashes | 0 |
+| Flake rate (3x) | 0% |
+| Flag-off violations | 0 |
+| PII leak patterns | 0 |
+| Bundle secrets | 0 |
+| Lint errors | 0 |
+
+#### 품질 게이트 문서 (11개)
+- HARDENING_STATUS.md — 1-page 현황 요약
+- HARDENING_GATE.md — 릴리스 게이트 체크리스트
+- HARDENING_PROGRESS.md — 결함 수정 이력
+- HARDENING_EFFORT_MODEL.md — 작업량 산정 모델
+- MUTATION_BASELINE.md — 뮤테이션 테스트 베이스라인
+- FUZZ_BASELINE.md — 퍼징 테스트 베이스라인
+- E2E_BASELINE.md — E2E 테스트 베이스라인
+- MONKEY_PLAN.md — 몽키 테스트 계획
+- TESTPLAN_DEVICE_MATRIX.md — 디바이스 테스트 매트릭스
+- TESTRUN_LOG_TEMPLATE.md — 테스트 실행 로그 템플릿
+- scripts/release-gate.sh — 릴리스 게이트 자동화 스크립트
+
 ---
 
 ## 아키텍처 원칙
@@ -318,6 +434,16 @@ IWearableProvider 인터페이스 → Mock/HealthKit/HealthConnect 구현체
 → 데이터: WearableSleepSummary (Zod 검증)
 ```
 
+### Edge Function 프록시 패턴
+```
+클라이언트에 LLM API Key 절대 노출 금지
+→ Edge Function이 프록시 역할 (클라이언트 → Edge → LLM)
+→ ANTHROPIC_API_KEY는 Supabase Secrets에만 저장
+→ VITE_AI=mock|edge 환경변수로 전환
+→ 네트워크 실패 시 mock fallback (횟수 제한)
+→ 429 (rate limit)는 fallback 안 함 (서버 정책 존중)
+```
+
 ### UHS 주의사항
 ```
 의료/진단/치료 표현 절대 금지
@@ -331,7 +457,13 @@ IWearableProvider 인터페이스 → Mock/HealthKit/HealthConnect 구현체
 
 ```bash
 VITE_BACKEND=local    # local | supabase
-VITE_AI=mock          # mock | claude
+VITE_AI=mock          # mock | edge
 VITE_ANALYTICS=mock   # mock | mixpanel
 VITE_FLAGS=local      # local | remote
+
+# Edge Function (VITE_AI=edge 시 필수)
+# VITE_EDGE_FUNCTION_URL=https://<ref>.supabase.co/functions/v1/ai-proxy
+
+# ⚠️ 서버 전용 키 (Supabase Secrets에만 설정, 클라이언트 절대 금지)
+# ANTHROPIC_API_KEY=sk-ant-...
 ```

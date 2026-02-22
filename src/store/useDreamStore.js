@@ -10,6 +10,9 @@ import { analyzeDream } from '../lib/ai/analyzeDream';
 import { zustandStorage } from '../lib/adapters/storage';
 import logger from '../lib/utils/logger';
 import useSymbolStore from './useSymbolStore';
+import analytics from '../lib/adapters/analytics';
+
+const MAX_DREAMS = 500;
 
 const useDreamStore = create(
   persist(
@@ -38,15 +41,22 @@ const useDreamStore = create(
           userId,
           content,
           voiceUrl: voiceUrl || null,
+          date: getTodayString(),
           analysis: null,
           createdAt: now,
           updatedAt: now,
         };
 
         set((state) => ({
-          dreams: [dream, ...state.dreams],
+          dreams: [dream, ...state.dreams].slice(0, MAX_DREAMS),
           isLoading: false,
         }));
+
+        analytics.track(analytics.events.DREAM_CREATE_COMPLETE, {
+          content_length: content.length,
+          has_voice: Boolean(voiceUrl),
+        });
+        analytics.incrementUserProperty('total_dreams', 1);
 
         // 자동 분석
         if (autoAnalyze) {
@@ -74,23 +84,30 @@ const useDreamStore = create(
         const result = await analyzeDream(dream.content);
 
         if (result.success) {
+          const analysis = result.data;
+
           set((state) => ({
             dreams: state.dreams.map(d =>
               d.id === dreamId
-                ? { ...d, analysis: result.data, updatedAt: new Date().toISOString() }
+                ? { ...d, analysis, updatedAt: new Date().toISOString() }
                 : d
             ),
             isAnalyzing: false,
           }));
 
-          // 심볼 사전에 동기화
-          if (result.data.symbols?.length > 0) {
+          // 분석 성공 시 심볼 사전 자동 동기화
+          if (dream.userId && Array.isArray(analysis?.symbols) && analysis.symbols.length > 0) {
             useSymbolStore.getState().syncSymbolsFromAnalysis(
               dream.userId,
               dreamId,
-              result.data.symbols,
+              analysis.symbols,
             );
           }
+
+          analytics.track(analytics.events.DREAM_ANALYSIS_COMPLETE, {
+            symbols_count: Array.isArray(analysis?.symbols) ? analysis.symbols.length : 0,
+            emotions_count: Array.isArray(analysis?.emotions) ? analysis.emotions.length : 0,
+          });
         } else {
           set({
             isAnalyzing: false,
@@ -115,13 +132,41 @@ const useDreamStore = create(
       },
 
       /**
-       * 꿈 삭제
+       * 꿈 삭제 (심볼 cascading delete 포함)
        * @param {string} dreamId
        */
       deleteDream: (dreamId) => {
+        const dream = get().dreams.find(d => d.id === dreamId);
+
         set((state) => ({
           dreams: state.dreams.filter(d => d.id !== dreamId),
         }));
+
+        // 심볼 사전에서 해당 dreamId 제거
+        if (dream?.analysis?.symbols) {
+          const symbolStore = useSymbolStore.getState();
+          const { symbols } = symbolStore;
+
+          for (const sym of dream.analysis.symbols) {
+            const stored = symbols.find(
+              s => s.userId === dream.userId && s.name === sym.name
+            );
+            if (!stored) continue;
+
+            const updatedDreamIds = stored.dreamIds.filter(id => id !== dreamId);
+            if (updatedDreamIds.length === 0) {
+              symbolStore.deleteSymbol(stored.id);
+            } else {
+              useSymbolStore.setState((state) => ({
+                symbols: state.symbols.map(s =>
+                  s.id === stored.id
+                    ? { ...s, dreamIds: updatedDreamIds, count: updatedDreamIds.length }
+                    : s
+                ),
+              }));
+            }
+          }
+        }
       },
 
       /**

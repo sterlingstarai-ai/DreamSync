@@ -31,7 +31,7 @@ export default function BottomNav() {
   };
 
   return (
-    <nav className="bottom-nav fixed bottom-0 left-0 right-0 z-40">
+    <nav className="bottom-nav fixed bottom-0 left-0 right-0 z-40" aria-label="메인 내비게이션">
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
         {navItems.map((item) => {
           const isActive = location.pathname === item.path;
@@ -41,6 +41,8 @@ export default function BottomNav() {
             <button
               key={item.path}
               onClick={() => handleNavClick(item.path)}
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
               className={`
                 flex flex-col items-center justify-center
                 w-16 h-full gap-0.5

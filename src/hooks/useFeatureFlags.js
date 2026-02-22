@@ -2,6 +2,7 @@
  * Feature Flag 관련 훅
  */
 import { useCallback } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useFeatureFlagStore from '../store/useFeatureFlagStore';
 
 /**
@@ -12,14 +13,18 @@ export default function useFeatureFlags() {
   const {
     flags,
     platform,
-    getFlag,
-    setFlag,
-    setFlags,
-    toggleFlag,
-    getFlagInfo,
-    getAvailableFlags,
-    resetFlags,
-  } = useFeatureFlagStore();
+  } = useFeatureFlagStore(useShallow(state => ({
+    flags: state.flags,
+    platform: state.platform,
+  })));
+
+  const getFlag = useFeatureFlagStore(state => state.getFlag);
+  const setFlag = useFeatureFlagStore(state => state.setFlag);
+  const setFlags = useFeatureFlagStore(state => state.setFlags);
+  const toggleFlag = useFeatureFlagStore(state => state.toggleFlag);
+  const getFlagInfo = useFeatureFlagStore(state => state.getFlagInfo);
+  const getAvailableFlags = useFeatureFlagStore(state => state.getAvailableFlags);
+  const resetFlags = useFeatureFlagStore(state => state.resetFlags);
 
   /**
    * 특정 플래그가 활성화되어 있는지 확인

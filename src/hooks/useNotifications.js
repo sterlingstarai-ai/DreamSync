@@ -6,6 +6,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import logger from '../lib/utils/logger';
+import analytics from '../lib/adapters/analytics';
 
 /**
  * 알림 ID 상수
@@ -14,6 +15,7 @@ const NOTIFICATION_IDS = {
   MORNING_REMINDER: 1,
   EVENING_REMINDER: 2,
   WEEKLY_REPORT: 3,
+  TEST_NOTIFICATION: 9000,
 };
 
 /**
@@ -58,6 +60,40 @@ export default function useNotifications() {
 
     init();
   }, [checkPermission]);
+
+  useEffect(() => {
+    if (!isNative) return;
+
+    let listenerHandle = null;
+    let disposed = false;
+
+    LocalNotifications.addListener('localNotificationActionPerformed', (event) => {
+      const notificationType = event?.notification?.actionTypeId
+        || event?.actionId
+        || event?.notification?.id
+        || 'unknown';
+      analytics.track(analytics.events.NOTIFICATION_CLICK, {
+        notification_type: String(notificationType),
+      });
+    })
+      .then((handle) => {
+        if (disposed) {
+          handle.remove().catch(() => {});
+          return;
+        }
+        listenerHandle = handle;
+      })
+      .catch((error) => {
+        logger.error('Failed to register notification click listener:', error);
+      });
+
+    return () => {
+      disposed = true;
+      if (listenerHandle) {
+        listenerHandle.remove().catch(() => {});
+      }
+    };
+  }, [isNative]);
 
   /**
    * 권한 요청
@@ -224,6 +260,43 @@ export default function useNotifications() {
   }, []);
 
   /**
+   * 테스트 알림 예약
+   * @param {number} [delayMinutes=1]
+   */
+  const scheduleTestNotification = useCallback(async (delayMinutes = 1) => {
+    if (!Capacitor.isNativePlatform()) return false;
+
+    if (!hasPermission) {
+      const granted = await requestPermission();
+      if (!granted) return false;
+    }
+
+    try {
+      const at = new Date(Date.now() + Math.max(1, delayMinutes) * 60 * 1000);
+
+      await LocalNotifications.schedule({
+        notifications: [
+          {
+            id: NOTIFICATION_IDS.TEST_NOTIFICATION,
+            title: 'DreamSync 테스트 알림',
+            body: '알림 설정이 정상적으로 동작하고 있어요.',
+            schedule: {
+              at,
+              allowWhileIdle: true,
+            },
+            sound: 'default',
+            actionTypeId: 'TEST_NOTIFICATION',
+          },
+        ],
+      });
+      return true;
+    } catch (error) {
+      logger.error('Failed to schedule test notification:', error);
+      return false;
+    }
+  }, [hasPermission, requestPermission]);
+
+  /**
    * 알림 설정 일괄 적용
    * @param {Object} settings
    */
@@ -278,6 +351,7 @@ export default function useNotifications() {
     scheduleWeeklyReportReminder,
     cancelNotification,
     cancelAllNotifications,
+    scheduleTestNotification,
     applyNotificationSettings,
 
     // 상수

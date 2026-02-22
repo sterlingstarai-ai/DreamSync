@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 .vercel
 .playwright-mcp/
+test-results/
+playwright-report/
 
 # Environment variables
 .env

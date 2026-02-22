@@ -1,12 +1,14 @@
 /**
  * useCheckInStore 테스트
  */
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import useCheckInStore from './useCheckInStore';
+import analytics from '../lib/adapters/analytics';
 
 describe('useCheckInStore', () => {
   beforeEach(() => {
     useCheckInStore.getState().reset();
+    vi.restoreAllMocks();
   });
 
   it('should start with empty state', () => {
@@ -32,6 +34,24 @@ describe('useCheckInStore', () => {
 
     const state = useCheckInStore.getState();
     expect(state.logs).toHaveLength(1);
+  });
+
+  it('should track check-in completion with duration', async () => {
+    const trackSpy = vi.spyOn(analytics, 'track');
+
+    await useCheckInStore.getState().addCheckIn({
+      userId: 'user-1',
+      condition: 4,
+      emotions: ['happy'],
+      stressLevel: 2,
+      events: ['exercise'],
+      durationSec: 29,
+    });
+
+    expect(trackSpy).toHaveBeenCalledWith(
+      analytics.events.CHECKIN_COMPLETE,
+      expect.objectContaining({ total_duration_sec: 29 }),
+    );
   });
 
   it('should update existing check-in for same day', async () => {
@@ -167,5 +187,35 @@ describe('useCheckInStore', () => {
 
     useCheckInStore.getState().reset();
     expect(useCheckInStore.getState().logs).toEqual([]);
+  });
+
+  describe('data cap', () => {
+    it('should cap check-ins at MAX_CHECKINS (365)', async () => {
+      // Pre-fill with 365 logs (all different dates)
+      const logs = Array.from({ length: 365 }, (_, i) => ({
+        id: `log-${i}`,
+        userId: 'user-cap',
+        date: `2025-${String(Math.floor(i / 28) + 1).padStart(2, '0')}-${String((i % 28) + 1).padStart(2, '0')}`,
+        condition: 3,
+        emotions: [],
+        stressLevel: 3,
+        events: [],
+        note: null,
+        sleep: null,
+        createdAt: new Date(2025, 0, i + 1).toISOString(),
+      }));
+      useCheckInStore.setState({ logs });
+
+      // Add a new check-in (different user to avoid same-day update)
+      await useCheckInStore.getState().addCheckIn({
+        userId: 'user-cap-new',
+        condition: 5,
+        emotions: ['happy'],
+        stressLevel: 1,
+        events: [],
+      });
+
+      expect(useCheckInStore.getState().logs.length).toBeLessThanOrEqual(365);
+    });
   });
 });

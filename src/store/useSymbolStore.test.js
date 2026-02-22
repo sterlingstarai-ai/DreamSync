@@ -70,7 +70,7 @@ describe('useSymbolStore', () => {
 
     const symbols = useSymbolStore.getState().symbols;
     expect(symbols[0].dreamIds).toEqual(['dream-1']);
-    expect(symbols[0].count).toBe(2);
+    expect(symbols[0].count).toBe(1);
   });
 
   it('should find symbol by name', () => {

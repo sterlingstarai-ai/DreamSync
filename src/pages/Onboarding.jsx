@@ -1,51 +1,123 @@
 /**
  * 온보딩 페이지
  */
-import { useState } from 'react';
-import { Moon, Sparkles, Check, ChevronRight, Bell } from 'lucide-react';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { Moon, Sparkles, Check, ChevronRight, Bell, Activity, Target } from 'lucide-react';
 import { Button } from '../components/common';
 import useAuth from '../hooks/useAuth';
 import useNotifications from '../hooks/useNotifications';
+import useSettingsStore from '../store/useSettingsStore';
 import { loadSampleData } from '../lib/utils/sampleData';
+import analytics from '../lib/adapters/analytics';
+import { getTimestampMs } from '../lib/utils/date';
+import useGoalStore from '../store/useGoalStore';
 
 const STEPS = [
   {
     id: 'welcome',
     icon: Moon,
-    title: 'DreamSync에\n오신 것을 환영해요',
-    description: '꿈과 감정의 패턴을 분석하여\n더 나은 하루를 예측해드려요',
+    title: '"꿈이 알려주는 내일의 나"',
+    description: '매일 30초, 내 무의식과 대화해보세요',
     color: '#7c3aed',
   },
   {
-    id: 'how',
-    icon: Sparkles,
-    title: '꿈 기록 → 체크인 → 예보',
-    description: '아침에 꿈을 기록하고, 저녁에 30초 체크인\nAI가 패턴을 분석해 내일을 예측해요',
-    color: '#3b82f6',
+    id: 'mini-checkin',
+    icon: Activity,
+    title: '미니 체크인 체험',
+    description: '오늘 컨디션을 선택하면 바로 결과를 보여드려요',
+    color: '#0ea5e9',
+    isMiniCheckIn: true,
   },
   {
     id: 'notification',
     icon: Bell,
     title: '알림을 설정할까요?',
-    description: '아침 꿈 기록과 저녁 체크인\n리마인더를 받아보세요',
+    description: '알림을 받으면 습관 형성 확률이 더 높아져요',
     color: '#10b981',
-    isAction: true,
+    isNotificationAction: true,
+  },
+  {
+    id: 'goal',
+    icon: Target,
+    title: '주간 목표 선택',
+    description: '나에게 맞는 시작 강도를 고르세요',
+    color: '#f59e0b',
+    isGoalStep: true,
   },
 ];
 
+const MINI_CHECKIN_LABELS = {
+  1: '많이 지침',
+  2: '조금 지침',
+  3: '보통',
+  4: '좋음',
+  5: '아주 좋음',
+};
+
+const GOAL_PRESETS = {
+  easy: {
+    label: '가볍게 시작',
+    description: '주 3회 체크인, 꿈 2개',
+    values: { checkInDays: 3, dreamCount: 2, avgSleepHours: 7 },
+  },
+  balanced: {
+    label: '균형 있게',
+    description: '주 5회 체크인, 꿈 4개',
+    values: { checkInDays: 5, dreamCount: 4, avgSleepHours: 7 },
+  },
+  focused: {
+    label: '집중 모드',
+    description: '주 7회 체크인, 꿈 5개',
+    values: { checkInDays: 7, dreamCount: 5, avgSleepHours: 7.5 },
+  },
+};
+
 export default function Onboarding() {
-  const { completeOnboarding } = useAuth();
+  const { user, completeOnboarding } = useAuth();
   const { requestPermission, scheduleMorningReminder, scheduleEveningReminder, scheduleWeeklyReportReminder } = useNotifications();
+  const updateNotifications = useSettingsStore(state => state.updateNotifications);
+  const updateGoals = useGoalStore(state => state.updateGoals);
 
   const [currentStep, setCurrentStep] = useState(0);
   const [notificationEnabled, setNotificationEnabled] = useState(false);
-  const [sampleLoaded, setSampleLoaded] = useState(false);
+  const [miniCondition, setMiniCondition] = useState(3);
+  const [selectedGoalPreset, setSelectedGoalPreset] = useState('balanced');
+  const startedAtRef = useRef(0);
+  const trackedStepsRef = useRef(new Set());
 
   const step = STEPS[currentStep];
   const isLastStep = currentStep === STEPS.length - 1;
+  const selectedGoal = useMemo(
+    () => GOAL_PRESETS[selectedGoalPreset] || GOAL_PRESETS.balanced,
+    [selectedGoalPreset],
+  );
+
+  useEffect(() => {
+    startedAtRef.current = getTimestampMs();
+  }, []);
+
+  useEffect(() => {
+    const stepNumber = currentStep + 1;
+    if (trackedStepsRef.current.has(stepNumber)) return;
+    trackedStepsRef.current.add(stepNumber);
+    analytics.track(analytics.events.ONBOARDING_STEP, { step: stepNumber });
+  }, [currentStep]);
 
   const handleNext = () => {
+    if (step.id === 'mini-checkin') {
+      analytics.track(analytics.events.ONBOARDING_MINI_CHECKIN, {
+        condition: miniCondition,
+      });
+    }
+
     if (isLastStep) {
+      loadSampleData(user?.id || 'local-user');
+      if (user?.id) {
+        updateGoals(user.id, selectedGoal.values);
+      }
+      analytics.track(analytics.events.ONBOARDING_COMPLETE, {
+        duration_sec: Math.max(1, Math.round((getTimestampMs() - startedAtRef.current) / 1000)),
+      });
       completeOnboarding();
     } else {
       setCurrentStep(currentStep + 1);
@@ -53,6 +125,9 @@ export default function Onboarding() {
   };
 
   const handleSkip = () => {
+    analytics.track(analytics.events.ONBOARDING_SKIP, {
+      step: currentStep + 1,
+    });
     completeOnboarding();
   };
 
@@ -62,8 +137,19 @@ export default function Onboarding() {
       await scheduleMorningReminder('07:00');
       await scheduleEveningReminder('21:00');
       await scheduleWeeklyReportReminder();
+      updateNotifications({
+        enabled: true,
+        morningReminder: true,
+        morningTime: '07:00',
+        eveningReminder: true,
+        eveningTime: '21:00',
+        weeklyReport: true,
+      });
       setNotificationEnabled(true);
+      return;
     }
+
+    updateNotifications({ enabled: false });
   };
 
   const Icon = step.icon;
@@ -118,8 +204,32 @@ export default function Onboarding() {
           {step.description}
         </p>
 
-        {/* Action (Notification Step) */}
-        {step.isAction && (
+        {/* 미니 체크인 */}
+        {step.isMiniCheckIn && (
+          <div className="w-full max-w-sm space-y-4 animate-fade-in-up">
+            <div className="rounded-2xl bg-[var(--bg-secondary)] border border-[var(--border-color)] p-5">
+              <p className="text-sm text-[var(--text-muted)] mb-4">오늘 컨디션</p>
+              <input
+                type="range"
+                min="1"
+                max="5"
+                step="1"
+                value={miniCondition}
+                aria-label="미니 체크인 컨디션"
+                onChange={(event) => setMiniCondition(Number(event.target.value))}
+              />
+              <div className="mt-4 flex items-center justify-between text-sm">
+                <span className="text-[var(--text-muted)]">결과</span>
+                <span className="font-semibold text-violet-300">
+                  {miniCondition}/5 · {MINI_CHECKIN_LABELS[miniCondition]}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 알림 설정 */}
+        {step.isNotificationAction && (
           <div className="w-full max-w-sm space-y-3 animate-fade-in-up">
             {notificationEnabled ? (
               <div className="flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-emerald-500/20 text-emerald-400">
@@ -136,23 +246,32 @@ export default function Onboarding() {
                 알림 허용하기
               </Button>
             )}
+          </div>
+        )}
 
-            {/* 샘플 데이터 로드 */}
-            {!sampleLoaded ? (
-              <button
-                onClick={() => {
-                  loadSampleData('local-user');
-                  setSampleLoaded(true);
-                }}
-                className="w-full text-sm text-[var(--text-muted)] hover:text-[var(--text-secondary)] py-2"
-              >
-                데모 데이터로 시작하기
-              </button>
-            ) : (
-              <p className="text-sm text-emerald-400 text-center py-2">
-                샘플 데이터가 추가되었어요
-              </p>
-            )}
+        {/* 목표 선택 */}
+        {step.isGoalStep && (
+          <div className="w-full max-w-sm space-y-3 animate-fade-in-up">
+            {Object.entries(GOAL_PRESETS).map(([presetKey, preset]) => {
+              const selected = selectedGoalPreset === presetKey;
+              return (
+                <button
+                  key={presetKey}
+                  onClick={() => setSelectedGoalPreset(presetKey)}
+                  className={`w-full text-left rounded-2xl border p-4 transition-colors ${
+                    selected
+                      ? 'border-violet-500 bg-violet-500/10'
+                      : 'border-[var(--border-color)] bg-[var(--bg-secondary)]'
+                  }`}
+                >
+                  <p className="font-semibold text-[var(--text-primary)]">{preset.label}</p>
+                  <p className="text-sm text-[var(--text-secondary)] mt-1">{preset.description}</p>
+                </button>
+              );
+            })}
+            <p className="text-xs text-[var(--text-muted)] text-center">
+              완료하면 샘플 꿈/체크인/예보 데이터가 자동 준비됩니다.
+            </p>
           </div>
         )}
       </div>

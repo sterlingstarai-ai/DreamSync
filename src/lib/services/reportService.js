@@ -127,13 +127,15 @@ function collectWeeklyData() {
   const emotionCounts = {};
   for (const dream of dreams) {
     for (const emotion of (dream.analysis?.emotions || [])) {
-      emotionCounts[emotion.type] = (emotionCounts[emotion.type] || 0) + 1;
+      const emotionName = emotion.name || emotion.type;
+      if (!emotionName) continue;
+      emotionCounts[emotionName] = (emotionCounts[emotionName] || 0) + 1;
     }
   }
   const topEmotions = Object.entries(emotionCounts)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5)
-    .map(([type, count]) => ({ type, count }));
+    .map(([name, count]) => ({ name, count }));
 
   return {
     dreams,

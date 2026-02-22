@@ -2,7 +2,68 @@
  * Vitest Setup
  */
 import '@testing-library/jest-dom';
-import { vi } from 'vitest';
+import { vi, beforeEach } from 'vitest';
+
+function createStorageMock() {
+  const target = {};
+  const store = {};
+
+  Object.defineProperties(target, {
+    getItem: {
+      enumerable: false,
+      value: vi.fn((key) => (Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null)),
+    },
+    setItem: {
+      enumerable: false,
+      value: vi.fn((key, value) => {
+        const str = String(value);
+        store[key] = str;
+        target[key] = str;
+      }),
+    },
+    removeItem: {
+      enumerable: false,
+      value: vi.fn((key) => {
+        delete store[key];
+        delete target[key];
+      }),
+    },
+    clear: {
+      enumerable: false,
+      value: vi.fn(() => {
+        for (const key of Object.keys(store)) {
+          delete store[key];
+          delete target[key];
+        }
+      }),
+    },
+    key: {
+      enumerable: false,
+      value: vi.fn((index) => Object.keys(store)[index] ?? null),
+    },
+    length: {
+      enumerable: false,
+      get: () => Object.keys(store).length,
+    },
+  });
+
+  return target;
+}
+
+const localStorageMock = createStorageMock();
+const sessionStorageMock = createStorageMock();
+
+Object.defineProperty(globalThis, 'localStorage', {
+  configurable: true,
+  writable: true,
+  value: localStorageMock,
+});
+
+Object.defineProperty(globalThis, 'sessionStorage', {
+  configurable: true,
+  writable: true,
+  value: sessionStorageMock,
+});
 
 // Mock Capacitor
 vi.mock('@capacitor/core', () => ({
@@ -77,3 +138,8 @@ global.webkitSpeechRecognition = vi.fn().mockImplementation(() => ({
   onerror: null,
   onend: null,
 }));
+
+beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
+});

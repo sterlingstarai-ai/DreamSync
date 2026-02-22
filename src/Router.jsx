@@ -14,6 +14,7 @@ const DreamCapture = lazy(() => import('./pages/DreamCapture'));
 const CheckIn = lazy(() => import('./pages/CheckIn'));
 const WeeklyReport = lazy(() => import('./pages/WeeklyReport'));
 const SymbolDictionary = lazy(() => import('./pages/SymbolDictionary'));
+const TimelineSearch = lazy(() => import('./pages/TimelineSearch'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Onboarding = lazy(() => import('./pages/Onboarding'));
 const Login = lazy(() => import('./pages/Auth/Login'));
@@ -159,6 +160,14 @@ export default function Router() {
             element={
               <ProtectedRoute>
                 <SymbolDictionary />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/search"
+            element={
+              <ProtectedRoute>
+                <TimelineSearch />
               </ProtectedRoute>
             }
           />

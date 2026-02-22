@@ -4,6 +4,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   initSyncQueue,
+  disposeSyncQueue,
   enqueue,
   isOnline,
   getPendingCount,
@@ -15,6 +16,7 @@ import {
 
 describe('syncQueue', () => {
   beforeEach(async () => {
+    await disposeSyncQueue();
     await clearQueue();
     await initSyncQueue();
   });

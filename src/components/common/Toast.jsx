@@ -102,6 +102,7 @@ function ToastItem({ type, title, message, onClose }) {
 
       <button
         onClick={onClose}
+        aria-label="알림 닫기"
         className="flex-shrink-0 p-1 rounded hover:bg-white/10 transition-colors"
       >
         <X className="w-4 h-4" />
@@ -113,6 +114,7 @@ function ToastItem({ type, title, message, onClose }) {
 /**
  * useToast Hook
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useToast() {
   const context = useContext(ToastContext);
 

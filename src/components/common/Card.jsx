@@ -2,7 +2,7 @@
  * Card 컴포넌트
  * 콘텐츠 컨테이너
  */
-import { forwardRef } from 'react';
+import { forwardRef, useCallback } from 'react';
 
 const variants = {
   default: 'bg-[var(--bg-secondary)] border border-[var(--border-color)]',
@@ -38,6 +38,17 @@ const Card = forwardRef(function Card(/** @type {any} */ props, ref) {
     '2xl': 'rounded-2xl',
   };
 
+  const handleKeyDown = useCallback((e) => {
+    if (onClick && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      onClick(e);
+    }
+  }, [onClick]);
+
+  const interactiveProps = onClick
+    ? { role: 'button', tabIndex: 0, onKeyDown: handleKeyDown }
+    : {};
+
   return (
     <div
       ref={ref}
@@ -50,6 +61,7 @@ const Card = forwardRef(function Card(/** @type {any} */ props, ref) {
         ${className}
       `}
       onClick={onClick}
+      {...interactiveProps}
       {...rest}
     >
       {children}

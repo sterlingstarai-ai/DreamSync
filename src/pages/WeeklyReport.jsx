@@ -1,11 +1,11 @@
 /**
  * 주간 리포트 페이지
  */
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart3, Moon, Calendar, TrendingUp, TrendingDown,
-  Minus, ChevronLeft, ChevronRight, Sparkles, AlertTriangle, Share2
+  Minus, Plus, Sparkles, AlertTriangle, Share2
 } from 'lucide-react';
 import {
   PageContainer, PageHeader, Card, EmptyState, Button, useToast
@@ -16,17 +16,67 @@ import useCheckIn from '../hooks/useCheckIn';
 import useForecast from '../hooks/useForecast';
 import { formatDate, getRecentDays, getShortDayName } from '../lib/utils/date';
 import { getEmotionById } from '../constants/emotions';
+import useAuthStore from '../store/useAuthStore';
+import useGoalStore from '../store/useGoalStore';
+import useCoachPlanStore from '../store/useCoachPlanStore';
+import analytics from '../lib/adapters/analytics';
 
 export default function WeeklyReport() {
   const navigate = useNavigate();
   const toast = useToast();
-  const { recentDreams, symbols, error: dreamError, clearError: clearDreamError } = useDreams();
-  const { recentLogs, stats: checkInStats, error: checkInError, clearError: clearCheckInError } = useCheckIn();
-  const { stats: forecastStats, error: forecastError, clearError: clearForecastError } = useForecast();
+  const userId = useAuthStore(state => state.user?.id || null);
+  const {
+    dreams,
+    recentDreams,
+    symbols,
+    error: dreamError,
+    clearError: clearDreamError,
+  } = useDreams();
+  const {
+    logs,
+    recentLogs,
+    stats: checkInStats,
+    error: checkInError,
+    clearError: clearCheckInError,
+  } = useCheckIn();
+  const {
+    stats: forecastStats,
+    experimentSummary,
+    error: forecastError,
+    clearError: clearForecastError,
+  } = useForecast();
+  const getWeeklyProgress = useGoalStore(state => state.getWeeklyProgress);
+  const updateGoals = useGoalStore(state => state.updateGoals);
+  const getSuggestedGoals = useGoalStore(state => state.getSuggestedGoals);
+  const applySuggestedGoals = useGoalStore(state => state.applySuggestedGoals);
+  const getRecentPlanStats = useCoachPlanStore(state => state.getRecentPlanStats);
+  const trackedReportWeekRef = useRef(null);
+  const coachPlanStats = useMemo(() => {
+    if (!userId) {
+      return {
+        days: 7,
+        activeDays: 0,
+        totalTasks: 0,
+        completedTasks: 0,
+        completionRate: 0,
+      };
+    }
+    return getRecentPlanStats(userId, 7);
+  }, [userId, getRecentPlanStats]);
 
   const activeError = dreamError || checkInError || forecastError;
 
-  const weekDays = getRecentDays(7);
+  const weekDays = useMemo(() => getRecentDays(7), []);
+
+  useEffect(() => {
+    const weekStart = weekDays[0];
+    if (!weekStart) return;
+    if (trackedReportWeekRef.current === weekStart) return;
+    trackedReportWeekRef.current = weekStart;
+    analytics.track(analytics.events.REPORT_VIEW, {
+      week: weekStart,
+    });
+  }, [weekDays]);
 
   // 주간 데이터가 충분한지 확인
   const hasEnoughData = recentLogs.length >= 3 || recentDreams.length >= 2;
@@ -48,7 +98,7 @@ export default function WeeklyReport() {
   const emotionStats = useMemo(() => {
     const counts = {};
     recentLogs.forEach(log => {
-      log.emotions.forEach(e => {
+      (log.emotions || []).forEach(e => {
         counts[e] = (counts[e] || 0) + 1;
       });
     });
@@ -63,6 +113,63 @@ export default function WeeklyReport() {
 
   // 심볼 통계
   const topSymbols = symbols.slice(0, 5);
+
+  const goalProgress = useMemo(() => {
+    if (!userId) {
+      return {
+        goals: {},
+        metrics: {},
+        progress: {},
+      };
+    }
+    return getWeeklyProgress(userId, {
+      logs: recentLogs,
+      dreams: recentDreams,
+    });
+  }, [userId, getWeeklyProgress, recentLogs, recentDreams]);
+
+  const achievedGoalCount = useMemo(() => {
+    const progressValues = Object.values(goalProgress.progress || {});
+    return progressValues.filter(item => item.achieved).length;
+  }, [goalProgress]);
+
+  const adjustGoal = useCallback((goalKey, delta) => {
+    if (!userId) return;
+    const current = goalProgress.goals?.[goalKey];
+    if (typeof current !== 'number') return;
+
+    const step = goalKey === 'avgSleepHours' ? 0.5 : 1;
+    const rawNext = current + (delta * step);
+    const next = goalKey === 'avgSleepHours'
+      ? Math.max(4, Math.min(10, Math.round(rawNext * 10) / 10))
+      : Math.max(1, Math.round(rawNext));
+
+    updateGoals(userId, {
+      ...goalProgress.goals,
+      [goalKey]: next,
+    });
+  }, [userId, goalProgress, updateGoals]);
+
+  const goalSuggestion = useMemo(() => {
+    if (!userId) return null;
+    return getSuggestedGoals(userId, {
+      logs,
+      dreams,
+      lookbackDays: 14,
+    });
+  }, [userId, getSuggestedGoals, logs, dreams]);
+
+  const applyRecommendedGoals = useCallback(() => {
+    if (!userId) return;
+    const applied = applySuggestedGoals(userId, {
+      logs,
+      dreams,
+      lookbackDays: 14,
+    });
+    if (applied) {
+      toast.success('추천 목표를 적용했어요');
+    }
+  }, [userId, logs, dreams, applySuggestedGoals, toast]);
 
   // 공유 텍스트 생성
   const buildShareText = useCallback(() => {
@@ -93,6 +200,9 @@ export default function WeeklyReport() {
     if (navigator.share) {
       try {
         await navigator.share({ title: 'DreamSync 주간 리포트', text });
+        analytics.track(analytics.events.REPORT_SHARE, {
+          share_method: 'navigator_share',
+        });
         return;
       } catch {
         // user cancelled or share failed — fall through to clipboard
@@ -101,6 +211,9 @@ export default function WeeklyReport() {
 
     try {
       await navigator.clipboard.writeText(text);
+      analytics.track(analytics.events.REPORT_SHARE, {
+        share_method: 'clipboard',
+      });
       toast.success('클립보드에 복사되었습니다');
     } catch {
       toast.warning('공유할 수 없습니다');
@@ -265,6 +378,126 @@ export default function WeeklyReport() {
               </section>
             )}
 
+            {/* 주간 코치 목표 */}
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                  주간 코치 목표
+                </h2>
+                <span className="text-sm text-[var(--text-muted)]">
+                  {achievedGoalCount}/3 달성
+                </span>
+              </div>
+
+              <div className="space-y-3">
+                <GoalProgressCard
+                  label="체크인"
+                  unit="일"
+                  goalKey="checkInDays"
+                  progress={goalProgress.progress?.checkInDays}
+                  onAdjust={adjustGoal}
+                />
+                <GoalProgressCard
+                  label="꿈 기록"
+                  unit="개"
+                  goalKey="dreamCount"
+                  progress={goalProgress.progress?.dreamCount}
+                  onAdjust={adjustGoal}
+                />
+                <GoalProgressCard
+                  label="평균 수면"
+                  unit="시간"
+                  goalKey="avgSleepHours"
+                  progress={goalProgress.progress?.avgSleepHours}
+                  onAdjust={adjustGoal}
+                />
+              </div>
+
+              {goalSuggestion && (
+                <Card padding="md" className="mt-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text-primary)]">
+                        추천 목표 ({goalSuggestion.confidence})
+                      </p>
+                      <p className="text-xs text-[var(--text-muted)] mt-1">
+                        최근 {goalSuggestion.basis.lookbackDays}일 패턴 기반
+                      </p>
+                      <p className="text-xs text-[var(--text-secondary)] mt-2">
+                        체크인 {goalSuggestion.suggested.checkInDays}일 · 꿈 {goalSuggestion.suggested.dreamCount}개 · 수면 {goalSuggestion.suggested.avgSleepHours}시간
+                      </p>
+                    </div>
+                    <Button size="sm" variant="secondary" onClick={applyRecommendedGoals}>
+                      추천 적용
+                    </Button>
+                  </div>
+                </Card>
+              )}
+            </section>
+
+            {/* 행동 실험 리포트 */}
+            <section>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3">
+                행동 실험 결과
+              </h2>
+              <Card padding="lg">
+                {experimentSummary.sampleSize === 0 ? (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    아직 실험 데이터가 부족해요. 대시보드에서 추천 행동을 체크해보세요.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      추천 행동을 절반 이상 실천한 날: <strong className="text-[var(--text-primary)]">{experimentSummary.highCompletionDays}일</strong>
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      실천률이 낮았던 날: <strong className="text-[var(--text-primary)]">{experimentSummary.lowCompletionDays}일</strong>
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      실천율 높은 날 평균 컨디션: <strong className="text-emerald-300">{experimentSummary.avgConditionHighCompletion || 0}/5</strong>
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      실천율 낮은 날 평균 컨디션: <strong className="text-amber-300">{experimentSummary.avgConditionLowCompletion || 0}/5</strong>
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      차이: <strong className={experimentSummary.improvement >= 0 ? 'text-emerald-300' : 'text-red-300'}>
+                        {experimentSummary.improvement > 0 ? '+' : ''}{experimentSummary.improvement}
+                      </strong>
+                    </p>
+                  </div>
+                )}
+              </Card>
+            </section>
+
+            {/* 코치 플랜 이행률 */}
+            <section>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3">
+                코치 플랜 이행률
+              </h2>
+              <Card padding="lg">
+                {coachPlanStats.totalTasks === 0 ? (
+                  <p className="text-sm text-[var(--text-muted)]">
+                    코치 플랜 기록이 아직 없어요. 대시보드에서 오늘 플랜을 실행해보세요.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      최근 7일 활성 일수: <strong className="text-[var(--text-primary)]">{coachPlanStats.activeDays}일</strong>
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      완료 태스크: <strong className="text-emerald-300">{coachPlanStats.completedTasks}개</strong>
+                      {' '}/ {coachPlanStats.totalTasks}개
+                    </p>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                      이행률: <strong className={coachPlanStats.completionRate >= 60 ? 'text-emerald-300' : 'text-amber-300'}>
+                        {coachPlanStats.completionRate}%
+                      </strong>
+                    </p>
+                  </div>
+                )}
+              </Card>
+            </section>
+
             {/* 인사이트 */}
             <section>
               <h2 className="text-lg font-semibold text-[var(--text-primary)] mb-3">
@@ -312,6 +545,51 @@ function SummaryCard({ icon: SummaryIcon, label, value, unit, trend = null }) {
           {trend === 'down' && <TrendingDown className="w-4 h-4 text-red-400" />}
         </div>
       </div>
+    </Card>
+  );
+}
+
+function GoalProgressCard({ label, unit, goalKey, progress, onAdjust }) {
+  if (!progress) return null;
+
+  const rate = Math.min(100, progress.rate || 0);
+
+  return (
+    <Card padding="md">
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <p className="text-sm text-[var(--text-primary)] font-medium">{label}</p>
+          <p className="text-xs text-[var(--text-muted)]">
+            {progress.current}{unit} / 목표 {progress.target}{unit}
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <button
+            onClick={() => onAdjust(goalKey, -1)}
+            className="w-7 h-7 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] flex items-center justify-center"
+            aria-label={`${label} 목표 낮추기`}
+          >
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onAdjust(goalKey, 1)}
+            className="w-7 h-7 rounded-full bg-[var(--bg-tertiary)] text-[var(--text-secondary)] flex items-center justify-center"
+            aria-label={`${label} 목표 높이기`}
+          >
+            <Plus className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <div className="h-2 rounded-full bg-[var(--bg-tertiary)] overflow-hidden">
+        <div
+          className={`h-full ${progress.achieved ? 'bg-emerald-500' : 'bg-violet-500'}`}
+          style={{ width: `${rate}%` }}
+        />
+      </div>
+      <p className={`text-xs mt-2 ${progress.achieved ? 'text-emerald-300' : 'text-[var(--text-muted)]'}`}>
+        {progress.achieved ? '목표 달성' : `달성률 ${rate}%`}
+      </p>
     </Card>
   );
 }

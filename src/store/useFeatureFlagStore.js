@@ -6,6 +6,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_FEATURE_FLAGS, FEATURE_FLAG_INFO, isFlagAvailable } from '../constants/featureFlags';
 import { Capacitor } from '@capacitor/core';
 import { zustandStorage } from '../lib/adapters/storage';
+import { setAIAdapter } from '../lib/adapters';
 import logger from '../lib/utils/logger';
 
 /**
@@ -62,6 +63,11 @@ const useFeatureFlagStore = create(
             [key]: value,
           },
         });
+
+        // Edge AI 플래그는 어댑터를 즉시 전환
+        if (key === 'edgeAI') {
+          setAIAdapter(value ? 'edge' : 'mock');
+        }
       },
 
       /**
@@ -84,6 +90,10 @@ const useFeatureFlagStore = create(
             ...validFlags,
           },
         });
+
+        if (typeof validFlags.edgeAI === 'boolean') {
+          setAIAdapter(validFlags.edgeAI ? 'edge' : 'mock');
+        }
       },
 
       /**
@@ -91,15 +101,30 @@ const useFeatureFlagStore = create(
        * @param {string} key
        */
       toggleFlag: (key) => {
-        const { flags, getFlag } = get();
+        const { flags, getFlag, platform } = get();
+
+        if (!(key in DEFAULT_FEATURE_FLAGS)) {
+          logger.warn(`Unknown flag key: "${key}"`);
+          return;
+        }
+        if (!isFlagAvailable(key, platform)) {
+          logger.warn(`Flag "${key}" is not available on ${platform}`);
+          return;
+        }
+
         const currentValue = getFlag(key);
+        const nextValue = !currentValue;
 
         set({
           flags: {
             ...flags,
-            [key]: !currentValue,
+            [key]: nextValue,
           },
         });
+
+        if (key === 'edgeAI') {
+          setAIAdapter(nextValue ? 'edge' : 'mock');
+        }
       },
 
       /**

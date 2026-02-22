@@ -8,7 +8,7 @@ import { Button, Input } from '../../components/common';
 import useAuth from '../../hooks/useAuth';
 
 export default function Login() {
-  const { signIn, isLoading } = useAuth();
+  const { signIn, signUp, isLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -99,9 +99,13 @@ export default function Login() {
             variant="secondary"
             fullWidth
             size="lg"
-            onClick={() => {
-              // 1단계에서는 게스트 로그인으로 처리
-              signIn({ email: 'guest@dreamsync.app', password: 'guest' });
+            onClick={async () => {
+              // 게스트 계정이 없으면 생성 후 진입
+              const credentials = { email: 'guest@dreamsync.app', password: 'guest123' };
+              const signedIn = await signIn(credentials);
+              if (!signedIn.success) {
+                await signUp({ ...credentials, name: 'Guest' });
+              }
             }}
           >
             게스트로 시작하기

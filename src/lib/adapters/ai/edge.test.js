@@ -5,6 +5,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DreamAnalysisSchema, ForecastPredictionSchema } from '../../ai/schemas';
+import storage from '../storage';
 
 // ─── Mock 설정 ──────────────────────────────────────
 
@@ -72,6 +73,8 @@ describe('EdgeAIAdapter', () => {
 
   beforeEach(async () => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
+    storage.get.mockResolvedValue({ state: { token: 'test-token' } });
     // 매 테스트마다 모듈 새로 로드 (fallbackCount 리셋)
     const mod = await import('./edge.js');
     EdgeAIAdapter = mod.EdgeAIAdapter;
@@ -91,6 +94,7 @@ describe('EdgeAIAdapter', () => {
     expect(result).toBeDefined();
     const validation = DreamAnalysisSchema.safeParse(result);
     expect(validation.success).toBe(true);
+    expect(storage.get).toHaveBeenCalledWith('auth');
   });
 
   it('analyzeDream: fetch 실패 → mock fallback 동작', async () => {
@@ -115,6 +119,15 @@ describe('EdgeAIAdapter', () => {
 
     await expect(EdgeAIAdapter.analyzeDream('꿈 내용'))
       .rejects.toThrow('요청 한도를 초과했습니다');
+  });
+
+  it('analyzeDream: 토큰 없음 → AUTH_REQUIRED 에러 (fallback 안 함)', async () => {
+    storage.get.mockResolvedValue(null);
+    globalThis.fetch = vi.fn();
+
+    await expect(EdgeAIAdapter.analyzeDream('충분히 긴 꿈 내용입니다.'))
+      .rejects.toThrow('로그인이 필요합니다');
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   it('fallback 횟수 초과 → AI_UNAVAILABLE 에러', async () => {

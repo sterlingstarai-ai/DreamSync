@@ -74,6 +74,12 @@
 - [ ] 실기기 성능 테스트
 - [ ] 메모리 프로파일링
 
+## 관련 문서
+
+- **디바이스 매트릭스**: [`TESTPLAN_DEVICE_MATRIX.md`](./TESTPLAN_DEVICE_MATRIX.md) — iOS/Android/Web 조합별 체크리스트
+- **테스트 실행 로그**: [`TESTRUN_LOG_TEMPLATE.md`](./TESTRUN_LOG_TEMPLATE.md) — 실행 결과 기록 템플릿
+- **하드닝 진행**: [`HARDENING_PROGRESS.md`](./HARDENING_PROGRESS.md) — 결함 수정 이력
+
 ## 실행 방법
 
 ```bash
@@ -82,4 +88,7 @@ npm test -- --filter hardening
 
 # 전체 테스트 (반복 실행)
 npm run test:repeat
+
+# 릴리스 게이트 (20x repeat)
+bash scripts/release-gate.sh --repeat 20
 ```

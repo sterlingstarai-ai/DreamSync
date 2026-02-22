@@ -2,16 +2,18 @@
  * 꿈 데이터 관련 훅
  */
 import { useCallback, useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useDreamStore from '../store/useDreamStore';
-import useSymbolStore from '../store/useSymbolStore';
 import useAuthStore from '../store/useAuthStore';
+
+const EMPTY_LIST = [];
 
 /**
  * 꿈 데이터 훅
  * @returns {Object}
  */
 export default function useDreams() {
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const userId = user?.id;
 
   const {
@@ -19,19 +21,23 @@ export default function useDreams() {
     isLoading,
     isAnalyzing,
     error,
-    addDream,
-    analyzeDream,
-    updateDreamContent,
-    deleteDream,
-    getDreamById,
-    getTodayDreams,
-    getRecentDreams,
-    getDreamsByDate,
-    getAllSymbols,
-    clearError,
-  } = useDreamStore();
+  } = useDreamStore(useShallow(state => ({
+    dreams: state.dreams,
+    isLoading: state.isLoading,
+    isAnalyzing: state.isAnalyzing,
+    error: state.error,
+  })));
 
-  const { syncSymbolsFromAnalysis } = useSymbolStore();
+  const addDream = useDreamStore(state => state.addDream);
+  const analyzeDream = useDreamStore(state => state.analyzeDream);
+  const updateDreamContent = useDreamStore(state => state.updateDreamContent);
+  const deleteDream = useDreamStore(state => state.deleteDream);
+  const getDreamById = useDreamStore(state => state.getDreamById);
+  const getTodayDreams = useDreamStore(state => state.getTodayDreams);
+  const getRecentDreams = useDreamStore(state => state.getRecentDreams);
+  const getDreamsByDate = useDreamStore(state => state.getDreamsByDate);
+  const getAllSymbols = useDreamStore(state => state.getAllSymbols);
+  const clearError = useDreamStore(state => state.clearError);
 
   /**
    * 사용자의 모든 꿈
@@ -44,18 +50,12 @@ export default function useDreams() {
   /**
    * 오늘의 꿈
    */
-  const todayDreams = useMemo(() => {
-    if (!userId) return [];
-    return getTodayDreams(userId);
-  }, [userId, getTodayDreams, dreams]);
+  const todayDreams = userId ? getTodayDreams(userId) : EMPTY_LIST;
 
   /**
    * 최근 7일 꿈
    */
-  const recentDreams = useMemo(() => {
-    if (!userId) return [];
-    return getRecentDreams(userId, 7);
-  }, [userId, getRecentDreams, dreams]);
+  const recentDreams = userId ? getRecentDreams(userId, 7) : EMPTY_LIST;
 
   /**
    * 새 꿈 기록
@@ -78,12 +78,7 @@ export default function useDreams() {
    */
   const analyzeAndSyncSymbols = useCallback(async (dreamId) => {
     await analyzeDream(dreamId);
-
-    const dream = getDreamById(dreamId);
-    if (dream?.analysis?.symbols && userId) {
-      syncSymbolsFromAnalysis(userId, dreamId, dream.analysis.symbols);
-    }
-  }, [analyzeDream, getDreamById, syncSymbolsFromAnalysis, userId]);
+  }, [analyzeDream]);
 
   /**
    * 꿈 삭제
@@ -103,10 +98,7 @@ export default function useDreams() {
   /**
    * 모든 심볼 가져오기
    */
-  const symbols = useMemo(() => {
-    if (!userId) return [];
-    return getAllSymbols(userId);
-  }, [userId, getAllSymbols, dreams]);
+  const symbols = userId ? getAllSymbols(userId) : EMPTY_LIST;
 
   /**
    * 통계

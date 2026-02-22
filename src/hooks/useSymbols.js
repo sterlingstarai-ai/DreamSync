@@ -2,64 +2,62 @@
  * 심볼 사전 관련 훅
  */
 import { useCallback, useMemo, useState } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import useSymbolStore from '../store/useSymbolStore';
 import useAuthStore from '../store/useAuthStore';
+
+const EMPTY_LIST = [];
 
 /**
  * 심볼 훅
  * @returns {Object}
  */
 export default function useSymbols() {
-  const { user } = useAuthStore();
+  const user = useAuthStore(useShallow(state => state.user));
   const userId = user?.id;
 
   const [searchQuery, setSearchQuery] = useState('');
 
   const {
-    symbols,
+    symbols: _symbols,
     isLoading,
     error,
-    updateSymbolMeaning,
-    deleteSymbol,
-    getSymbolById,
-    getUserSymbols,
-    getTopSymbols,
-    getRecentSymbols,
-    searchSymbols,
-    getTotalSymbolCount,
-  } = useSymbolStore();
+  } = useSymbolStore(useShallow(state => ({
+    symbols: state.symbols,
+    isLoading: state.isLoading,
+    error: state.error,
+  })));
+
+  const updateSymbolMeaning = useSymbolStore(state => state.updateSymbolMeaning);
+  const deleteSymbol = useSymbolStore(state => state.deleteSymbol);
+  const getSymbolById = useSymbolStore(state => state.getSymbolById);
+  const getUserSymbols = useSymbolStore(state => state.getUserSymbols);
+  const getTopSymbols = useSymbolStore(state => state.getTopSymbols);
+  const getRecentSymbols = useSymbolStore(state => state.getRecentSymbols);
+  const searchSymbols = useSymbolStore(state => state.searchSymbols);
+  const getTotalSymbolCount = useSymbolStore(state => state.getTotalSymbolCount);
 
   /**
    * 사용자의 모든 심볼
    */
-  const userSymbols = useMemo(() => {
-    if (!userId) return [];
-    return getUserSymbols(userId);
-  }, [userId, getUserSymbols, symbols]);
+  const userSymbols = userId ? getUserSymbols(userId) : EMPTY_LIST;
 
   /**
    * 상위 심볼
    */
-  const topSymbols = useMemo(() => {
-    if (!userId) return [];
-    return getTopSymbols(userId, 10);
-  }, [userId, getTopSymbols, symbols]);
+  const topSymbols = userId ? getTopSymbols(userId, 10) : EMPTY_LIST;
 
   /**
    * 최근 심볼
    */
-  const recentSymbols = useMemo(() => {
-    if (!userId) return [];
-    return getRecentSymbols(userId, 10);
-  }, [userId, getRecentSymbols, symbols]);
+  const recentSymbols = userId ? getRecentSymbols(userId, 10) : EMPTY_LIST;
 
   /**
    * 검색 결과
    */
-  const searchResults = useMemo(() => {
-    if (!userId || !searchQuery.trim()) return [];
-    return searchSymbols(userId, searchQuery);
-  }, [userId, searchQuery, searchSymbols, symbols]);
+  const searchResults = userId && searchQuery.trim()
+    ? searchSymbols(userId, searchQuery)
+    : EMPTY_LIST;
 
   /**
    * 표시할 심볼 목록 (검색 중이면 검색 결과, 아니면 전체)
@@ -109,10 +107,7 @@ export default function useSymbols() {
   /**
    * 총 심볼 수
    */
-  const totalCount = useMemo(() => {
-    if (!userId) return 0;
-    return getTotalSymbolCount(userId);
-  }, [userId, getTotalSymbolCount, symbols]);
+  const totalCount = userId ? getTotalSymbolCount(userId) : 0;
 
   /**
    * 통계

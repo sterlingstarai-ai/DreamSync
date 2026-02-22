@@ -13,7 +13,9 @@ export const isWeb = Capacitor.getPlatform() === 'web';
 
 // Initialize Capacitor plugins
 export async function initCapacitor() {
-  if (!isNative) return;
+  if (!isNative) return () => {};
+
+  const listenerHandles = [];
 
   try {
     // Hide splash screen
@@ -26,25 +28,39 @@ export async function initCapacitor() {
 
     // Handle back button on Android
     if (isAndroid) {
-      App.addListener('backButton', ({ canGoBack }) => {
+      const backButtonHandle = await App.addListener('backButton', ({ canGoBack }) => {
         if (!canGoBack) {
           App.exitApp();
         } else {
           window.history.back();
         }
       });
+      listenerHandles.push(backButtonHandle);
     }
 
     // Keyboard events
-    Keyboard.addListener('keyboardWillShow', (info) => {
+    const keyboardShowHandle = await Keyboard.addListener('keyboardWillShow', (info) => {
       document.body.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`);
     });
+    listenerHandles.push(keyboardShowHandle);
 
-    Keyboard.addListener('keyboardWillHide', () => {
+    const keyboardHideHandle = await Keyboard.addListener('keyboardWillHide', () => {
       document.body.style.setProperty('--keyboard-height', '0px');
     });
+    listenerHandles.push(keyboardHideHandle);
 
   } catch (error) {
     logger.error('Capacitor init error:', error);
   }
+
+  return async () => {
+    for (const handle of listenerHandles) {
+      try {
+        await handle.remove();
+      } catch {
+        // 무시: 이미 해제된 핸들러일 수 있음
+      }
+    }
+    document.body.style.setProperty('--keyboard-height', '0px');
+  };
 }

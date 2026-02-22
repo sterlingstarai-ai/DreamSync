@@ -30,14 +30,19 @@ const useSymbolStore = create(
         const today = getTodayString();
 
         if (existing) {
+          const alreadyLinked = existing.dreamIds.includes(dreamId);
+          const nextDreamIds = alreadyLinked
+            ? existing.dreamIds
+            : [...existing.dreamIds, dreamId];
+
           // 기존 심볼 업데이트
           set((state) => ({
             symbols: state.symbols.map(s =>
               s.id === existing.id
                 ? {
                     ...s,
-                    count: s.count + 1,
-                    dreamIds: [...new Set([...s.dreamIds, dreamId])],
+                    count: nextDreamIds.length,
+                    dreamIds: nextDreamIds,
                     lastSeen: today,
                     updatedAt: new Date().toISOString(),
                   }
