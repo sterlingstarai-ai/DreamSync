@@ -57,8 +57,9 @@ export default function CheckIn() {
     wakeTime: '07:00',
     quality: 3,
     duration: 480,
-    source: healthkitEnabled ? 'auto' : 'manual',
+    source: 'manual',
   });
+  const [hasManualSleepEdit, setHasManualSleepEdit] = useState(false);
   const checkInStartedAtRef = useRef(0);
   const stepStartedAtRef = useRef(0);
   const currentStepRef = useRef(0);
@@ -92,15 +93,20 @@ export default function CheckIn() {
       wakeTime: summary.wakeTime || '07:00',
       quality: summary.sleepQualityScore != null ? Math.round(summary.sleepQualityScore / 2) : 3,
       duration: summary.totalSleepMinutes,
-      source: summary.source,
+      source: summary.source === 'healthconnect' ? 'healthconnect' : 'healthkit',
     };
   }, [healthkitEnabled, getTodaySummary]);
 
   const resolvedSleepData = useMemo(() => {
     if (!healthkitEnabled) return sleepData;
-    if (sleepData.source === 'manual') return sleepData;
+    if (hasManualSleepEdit) return sleepData;
     return wearableSleepData || sleepData;
-  }, [healthkitEnabled, sleepData, wearableSleepData]);
+  }, [healthkitEnabled, hasManualSleepEdit, sleepData, wearableSleepData]);
+
+  const handleSleepChange = (nextSleepData) => {
+    setHasManualSleepEdit(true);
+    setSleepData(nextSleepData);
+  };
 
   const triggerHaptic = async () => {
     if (Capacitor.isNativePlatform()) {
@@ -295,7 +301,7 @@ export default function CheckIn() {
           {currentStep === 'sleep' && (
             <SleepStep
               data={resolvedSleepData}
-              onChange={setSleepData}
+              onChange={handleSleepChange}
             />
           )}
 
@@ -503,18 +509,16 @@ function StressStep({ value, onChange }) {
  */
 function SleepStep({ data, onChange }) {
   const handleTimeChange = (field, value) => {
-    onChange(prev => {
-      const updated = { ...prev, [field]: value, source: 'manual' };
-      // 취침/기상 시간으로 duration 자동 계산
-      if (updated.bedTime && updated.wakeTime) {
-        const [bH, bM] = updated.bedTime.split(':').map(Number);
-        const [wH, wM] = updated.wakeTime.split(':').map(Number);
-        let mins = (wH * 60 + wM) - (bH * 60 + bM);
-        if (mins < 0) mins += 24 * 60; // 자정 넘김 (0은 동일 시간이므로 유지)
-        updated.duration = mins;
-      }
-      return updated;
-    });
+    const updated = { ...data, [field]: value, source: 'manual' };
+    // 취침/기상 시간으로 duration 자동 계산
+    if (updated.bedTime && updated.wakeTime) {
+      const [bH, bM] = updated.bedTime.split(':').map(Number);
+      const [wH, wM] = updated.wakeTime.split(':').map(Number);
+      let mins = (wH * 60 + wM) - (bH * 60 + bM);
+      if (mins < 0) mins += 24 * 60; // 자정 넘김 (0은 동일 시간이므로 유지)
+      updated.duration = mins;
+    }
+    onChange(updated);
   };
 
   const hours = Math.floor(data.duration / 60);
@@ -578,7 +582,7 @@ function SleepStep({ data, onChange }) {
             {[1, 2, 3, 4, 5].map((q) => (
               <button
                 key={q}
-                onClick={() => onChange(prev => ({ ...prev, quality: q, source: 'manual' }))}
+                onClick={() => onChange({ ...data, quality: q, source: 'manual' })}
                 role="radio"
                 aria-checked={data.quality === q}
                 aria-label={`수면 품질 ${qualityLabels[q]} (${q}/5)`}
