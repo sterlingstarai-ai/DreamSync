@@ -29,7 +29,9 @@ export default function useVoiceInput({
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
-  const [error, setError] = useState(null);
+  const [error, setError] = useState(
+    isSupported ? null : '음성 인식이 지원되지 않는 브라우저입니다.',
+  );
 
   const recognitionRef = useRef(null);
 
@@ -38,7 +40,6 @@ export default function useVoiceInput({
    */
   useEffect(() => {
     if (!isSupported) {
-      setError('음성 인식이 지원되지 않는 브라우저입니다.');
       return;
     }
 

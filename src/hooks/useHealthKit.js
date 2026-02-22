@@ -62,6 +62,30 @@ export function useHealthKit() {
     init();
   }, [healthKitEnabled]);
 
+  // 동기화
+  const sync = useCallback(async () => {
+    if (!isConnected && platform !== 'web') {
+      throw new Error('건강 앱에 먼저 연결해주세요.');
+    }
+
+    try {
+      const result = await syncHealthData();
+
+      if (result.success) {
+        setLastSync(result.syncedAt);
+
+        // 오늘 수면 데이터 갱신
+        const sleep = await getTodaySleepData();
+        setTodaySleep(sleep);
+      }
+
+      return result;
+    } catch (e) {
+      setError(e.message);
+      throw e;
+    }
+  }, [isConnected, platform]);
+
   // 권한 요청 및 연결
   const connect = useCallback(async () => {
     if (!healthKitEnabled) {
@@ -88,7 +112,7 @@ export function useHealthKit() {
     } finally {
       setIsLoading(false);
     }
-  }, [healthKitEnabled]);
+  }, [healthKitEnabled, sync]);
 
   // 연결 해제
   const disconnect = useCallback(async () => {
@@ -103,30 +127,6 @@ export function useHealthKit() {
       setIsLoading(false);
     }
   }, []);
-
-  // 동기화
-  const sync = useCallback(async () => {
-    if (!isConnected && platform !== 'web') {
-      throw new Error('건강 앱에 먼저 연결해주세요.');
-    }
-
-    try {
-      const result = await syncHealthData();
-
-      if (result.success) {
-        setLastSync(result.syncedAt);
-
-        // 오늘 수면 데이터 갱신
-        const sleep = await getTodaySleepData();
-        setTodaySleep(sleep);
-      }
-
-      return result;
-    } catch (e) {
-      setError(e.message);
-      throw e;
-    }
-  }, [isConnected, platform]);
 
   // 기간별 수면 데이터 조회
   const fetchSleepData = useCallback(async (startDate, endDate) => {

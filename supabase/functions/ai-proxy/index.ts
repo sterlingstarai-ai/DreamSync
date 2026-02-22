@@ -24,19 +24,23 @@ const BASE_CORS_HEADERS = {
   'Access-Control-Max-Age': '86400',
 };
 
-const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || '')
+const ALLOWED_ORIGINS = (Deno.env.get('ALLOWED_ORIGINS') || 'null')
   .split(',')
   .map(v => v.trim())
   .filter(Boolean);
 
+if (ALLOWED_ORIGINS.includes('*')) {
+  console.error('[SECURITY] ALLOWED_ORIGINS must not include wildcard');
+}
+
 function getCorsHeaders(origin: string | null): HeadersInit {
-  if (ALLOWED_ORIGINS.length === 0) {
+  if (!origin) {
     return {
       ...BASE_CORS_HEADERS,
-      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Origin': 'null',
     };
   }
-  if (origin && ALLOWED_ORIGINS.includes(origin)) {
+  if (ALLOWED_ORIGINS.includes(origin)) {
     return {
       ...BASE_CORS_HEADERS,
       'Access-Control-Allow-Origin': origin,

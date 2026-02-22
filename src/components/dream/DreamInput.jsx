@@ -1,15 +1,11 @@
 /**
  * 꿈 텍스트 입력 컴포넌트
  */
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 
 export default function DreamInput({ value, onChange, placeholder, maxLength = 2000 }) {
   const textareaRef = useRef(null);
-  const [charCount, setCharCount] = useState(value?.length || 0);
-
-  useEffect(() => {
-    setCharCount(value?.length || 0);
-  }, [value]);
+  const charCount = value?.length || 0;
 
   // 자동 높이 조절
   useEffect(() => {
@@ -24,7 +20,6 @@ export default function DreamInput({ value, onChange, placeholder, maxLength = 2
     const newValue = e.target.value;
     if (newValue.length <= maxLength) {
       onChange(newValue);
-      setCharCount(newValue.length);
     }
   };
 
