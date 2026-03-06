@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { WifiOff } from 'lucide-react';
 import useAuthStore from './store/useAuthStore';
 import useNetworkStatus from './hooks/useNetworkStatus';
+import useSyncStatusStore from './store/useSyncStatusStore';
 import { PageLoading } from './components/common/Loading';
 
 // Lazy-loaded 페이지 컴포넌트
@@ -88,10 +89,35 @@ function OfflineBanner() {
   );
 }
 
+function SyncBanner() {
+  const { status, pendingCount, lastError, isOnline } = useSyncStatusStore();
+
+  if (!isOnline || status === 'idle') return null;
+
+  if (status === 'syncing') {
+    return (
+      <div className="fixed top-8 left-0 right-0 z-40 bg-sky-600 text-white text-center py-1.5 text-xs font-medium">
+        동기화 중 {pendingCount > 0 ? `· ${pendingCount}건 대기` : ''}
+      </div>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <div className="fixed top-8 left-0 right-0 z-40 bg-red-600 text-white text-center py-1.5 text-xs font-medium">
+        동기화 오류{lastError ? ` · ${lastError}` : ''}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export default function Router() {
   return (
     <BrowserRouter>
       <OfflineBanner />
+      <SyncBanner />
       <Suspense fallback={<PageLoading message="페이지 로딩 중..." />}>
         <Routes>
           {/* 공개 라우트 */}

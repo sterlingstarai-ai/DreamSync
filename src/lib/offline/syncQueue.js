@@ -1,63 +1,171 @@
 /**
  * 오프라인 동기화 큐
- * 네트워크 연결이 없을 때 데이터 변경을 큐에 저장하고,
- * 온라인 복귀 시 자동으로 동기화
- *
- * Phase 1: 로컬 전용이므로 큐만 구성 (실제 sync는 Phase 2에서 Supabase 연동)
+ * 로컬 우선 저장 후, 온라인 시 원격 백업/동기화를 수행한다.
  */
 import { Network } from '@capacitor/network';
 import storage from '../adapters/storage';
+import { getAPIAdapter } from '../adapters/api';
+import { getSourceDeviceId } from '../sync/metadata';
+import logger from '../utils/logger';
+import SentryAdapter from '../adapters/analytics/sentry';
 
 const QUEUE_KEY = 'sync_queue';
+const MAX_RETRIES = 3;
 
-/** @type {{ items: Array, isOnline: boolean, listeners: Set<Function>, initialized: boolean, networkListener: any }} */
-const state = {
-  items: [],
+const EMPTY_STATUS = {
+  status: 'idle',
   isOnline: true,
-  listeners: new Set(),
-  initialized: false,
-  networkListener: null,
+  pendingCount: 0,
+  lastSyncedAt: null,
+  lastError: null,
 };
 
-/**
- * 큐 초기화 - 앱 시작 시 호출
- */
+/** @type {{ items: Array, listeners: Set<Function>, networkListener: any, initialized: boolean, status: typeof EMPTY_STATUS }} */
+const state = {
+  items: [],
+  listeners: new Set(),
+  networkListener: null,
+  initialized: false,
+  status: { ...EMPTY_STATUS },
+};
+
+let isFlushing = false;
+
+function notify() {
+  const snapshot = getSyncStatusSnapshot();
+  for (const listener of state.listeners) {
+    listener(snapshot);
+  }
+}
+
+function updateStatus(partial) {
+  state.status = {
+    ...state.status,
+    ...partial,
+    pendingCount: state.items.length,
+  };
+  notify();
+}
+
+async function persist() {
+  await storage.set(QUEUE_KEY, state.items);
+}
+
+function parseLegacyType(type = '') {
+  const [rawEntity = 'unknown', rawAction = 'upsert'] = String(type).split(':');
+  const entityMap = {
+    dream: 'dreams',
+    dreams: 'dreams',
+    checkin: 'daily_logs',
+    checkins: 'daily_logs',
+    forecast: 'forecasts',
+    symbol: 'personal_symbols',
+    coach: 'coach_plans',
+  };
+  const opMap = {
+    create: 'upsert',
+    add: 'upsert',
+    update: 'upsert',
+    upsert: 'upsert',
+    delete: 'delete',
+    remove: 'delete',
+  };
+
+  return {
+    entity: entityMap[rawEntity] || rawEntity,
+    op: opMap[rawAction] || 'upsert',
+  };
+}
+
+function normalizeQueueItem(input = {}) {
+  if (input.entity && input.op) {
+    const payload = input.payload || {};
+    const updatedAt = input.clientUpdatedAt || payload.updatedAt || new Date().toISOString();
+    return {
+      id: input.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      entity: input.entity,
+      op: input.op,
+      recordId: input.recordId || payload.id,
+      payload,
+      clientUpdatedAt: updatedAt,
+      sourceDeviceId: input.sourceDeviceId || payload.sourceDeviceId || getSourceDeviceId(),
+      retries: typeof input.retries === 'number' ? input.retries : 0,
+      createdAt: input.createdAt || new Date().toISOString(),
+    };
+  }
+
+  const { entity, op } = parseLegacyType(input.type);
+  const payload = input.payload || {};
+  return {
+    id: input.id || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    entity,
+    op,
+    recordId: payload.id || input.recordId,
+    payload,
+    clientUpdatedAt: payload.updatedAt || new Date().toISOString(),
+    sourceDeviceId: payload.sourceDeviceId || getSourceDeviceId(),
+    retries: typeof input.retries === 'number' ? input.retries : 0,
+    createdAt: input.createdAt || new Date().toISOString(),
+  };
+}
+
+function getCurrentBatch() {
+  return [...state.items].sort((a, b) => {
+    return new Date(a.clientUpdatedAt).getTime() - new Date(b.clientUpdatedAt).getTime();
+  });
+}
+
+async function processBatch(batch) {
+  const api = getAPIAdapter();
+
+  if (!api || typeof api.processSyncBatch !== 'function') {
+    return { processed: batch.length };
+  }
+
+  if (api.name === 'local') {
+    return { processed: batch.length };
+  }
+
+  if (typeof api.isConfigured === 'function' && !api.isConfigured()) {
+    throw new Error('원격 동기화 설정이 완료되지 않았습니다.');
+  }
+
+  return await api.processSyncBatch(batch);
+}
+
 export async function initSyncQueue() {
   if (state.initialized) return;
 
-  // 저장된 큐 로드
   const saved = await storage.get(QUEUE_KEY);
   if (Array.isArray(saved)) {
-    state.items = saved;
+    state.items = saved.map(normalizeQueueItem);
   }
 
-  // 네트워크 상태 감시
   const status = await Network.getStatus();
-  state.isOnline = status.connected;
+  state.status = {
+    ...state.status,
+    isOnline: status.connected,
+    pendingCount: state.items.length,
+  };
 
-  // 온라인 상태에서 대기 큐가 있으면 즉시 플러시
-  if (state.isOnline && state.items.length > 0) {
+  if (state.status.isOnline && state.items.length > 0) {
     await flush();
+  } else {
+    notify();
   }
 
-  state.networkListener = await Network.addListener('networkStatusChange', async (newStatus) => {
-    const wasOffline = !state.isOnline;
-    state.isOnline = newStatus.connected;
+  state.networkListener = await Network.addListener('networkStatusChange', async (nextStatus) => {
+    const wasOffline = !state.status.isOnline;
+    updateStatus({ isOnline: nextStatus.connected });
 
-    // 오프라인→온라인 전환 시 큐 플러시
-    if (wasOffline && newStatus.connected) {
+    if (wasOffline && nextStatus.connected) {
       await flush();
     }
-
-    notify();
   });
 
   state.initialized = true;
 }
 
-/**
- * 큐 정리 - 앱 종료/재초기화 시 리스너 해제
- */
 export async function disposeSyncQueue() {
   if (state.networkListener && typeof state.networkListener.remove === 'function') {
     await state.networkListener.remove();
@@ -66,140 +174,96 @@ export async function disposeSyncQueue() {
   state.initialized = false;
 }
 
-/**
- * 변경사항을 큐에 추가
- * @param {Object} operation
- * @param {string} operation.type - 작업 유형 (예: 'dream:create', 'checkin:add')
- * @param {Object} operation.payload - 작업 데이터
- * @param {number} [operation.retries=0] - 재시도 횟수
- */
-export async function enqueue({ type, payload }) {
-  const item = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    type,
-    payload,
-    retries: 0,
-    createdAt: new Date().toISOString(),
-  };
-
+export async function enqueue(input) {
+  const item = normalizeQueueItem(input);
   state.items.push(item);
   await persist();
-  notify();
+  updateStatus({
+    status: state.status.isOnline ? 'syncing' : 'offline',
+    lastError: null,
+  });
 
-  // 온라인이면 즉시 플러시 시도
-  if (state.isOnline) {
+  if (state.status.isOnline) {
     await flush();
   }
 }
 
-let isFlushing = false;
-
-/**
- * 큐 플러시 - 모든 대기 중인 작업 실행
- * Phase 2: 여기에 Supabase 동기화 로직 추가
- */
-async function flush() {
-  if (isFlushing || state.items.length === 0) return;
-  isFlushing = true;
-  try {
-
-  const pending = [...state.items];
-  const failed = [];
-
-  for (const item of pending) {
-    try {
-      await processItem(item);
-    } catch {
-      item.retries++;
-      if (item.retries < 3) {
-        failed.push(item);
-      }
-      // 3회 실패 시 버림
+export async function flush() {
+  if (isFlushing || state.items.length === 0) {
+    if (state.items.length === 0) {
+      updateStatus({ status: state.status.isOnline ? 'idle' : 'offline' });
     }
+    return;
   }
 
-  state.items = failed;
-  await persist();
-  notify();
+  isFlushing = true;
+  updateStatus({
+    status: state.status.isOnline ? 'syncing' : 'offline',
+    lastError: null,
+  });
+
+  try {
+    const batch = getCurrentBatch();
+    await processBatch(batch);
+    state.items = [];
+    await persist();
+    updateStatus({
+      status: state.status.isOnline ? 'idle' : 'offline',
+      lastSyncedAt: new Date().toISOString(),
+      lastError: null,
+    });
+  } catch (error) {
+    logger.error('[SyncQueue] flush failed:', error);
+    SentryAdapter.setTag('sync_status', 'error');
+    SentryAdapter.captureException(error, {
+      queue_size: state.items.length,
+      queue_entities: state.items.map(item => item.entity).join(','),
+    });
+
+    const failed = [];
+    for (const item of state.items) {
+      const nextRetries = (item.retries || 0) + 1;
+      if (nextRetries < MAX_RETRIES) {
+        failed.push({ ...item, retries: nextRetries });
+      }
+    }
+    state.items = failed;
+    await persist();
+    updateStatus({
+      status: state.status.isOnline ? 'error' : 'offline',
+      lastError: error?.message || '동기화에 실패했습니다.',
+    });
   } finally {
     isFlushing = false;
   }
 }
 
-/**
- * 개별 작업 처리
- * Phase 1: 로컬 전용이므로 즉시 완료 처리
- * Phase 2: Supabase API 호출로 교체
- * @param {Object} _item
- */
-async function processItem(_item) {
-  // Phase 1: 모든 데이터는 이미 Zustand persist로 로컬 저장됨
-  // Phase 2에서 이 함수를 확장하여 Supabase에 동기화
-  //
-  // switch (item.type) {
-  //   case 'dream:create':
-  //     await supabase.from('dreams').insert(item.payload);
-  //     break;
-  //   case 'checkin:add':
-  //     await supabase.from('daily_logs').upsert(item.payload);
-  //     break;
-  //   default:
-  //     console.warn('[SyncQueue] Unknown type:', item.type);
-  // }
-
-  return Promise.resolve();
+export function getSyncStatusSnapshot() {
+  return {
+    ...state.status,
+    pendingCount: state.items.length,
+  };
 }
 
-/**
- * 큐를 스토리지에 저장
- */
-async function persist() {
-  await storage.set(QUEUE_KEY, state.items);
-}
-
-/**
- * 상태 변경 리스너에게 알림
- */
-function notify() {
-  for (const listener of state.listeners) {
-    listener({
-      isOnline: state.isOnline,
-      pendingCount: state.items.length,
-    });
-  }
-}
-
-/**
- * 현재 네트워크 상태
- * @returns {boolean}
- */
 export function isOnline() {
-  return state.isOnline;
+  return state.status.isOnline;
 }
 
-/**
- * 대기 중인 작업 수
- * @returns {number}
- */
 export function getPendingCount() {
   return state.items.length;
 }
 
-/**
- * 상태 변경 구독
- * @param {function} listener
- * @returns {function} unsubscribe
- */
 export function subscribe(listener) {
   state.listeners.add(listener);
+  listener(getSyncStatusSnapshot());
   return () => state.listeners.delete(listener);
 }
 
-/**
- * 큐 초기화 (개발용)
- */
 export async function clearQueue() {
   state.items = [];
   await persist();
-  notify();
+  updateStatus({
+    status: state.status.isOnline ? 'idle' : 'offline',
+    lastError: null,
+  });
 }

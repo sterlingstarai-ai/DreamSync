@@ -19,6 +19,7 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, errorInfo) {
     logger.error('[ErrorBoundary]', error, errorInfo);
+    SentryAdapter.setTag('route_level_crash', window.location?.pathname || 'unknown');
     SentryAdapter.captureException(error, {
       componentStack: errorInfo?.componentStack,
     });

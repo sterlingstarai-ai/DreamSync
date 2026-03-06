@@ -7,6 +7,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { generateId } from '../lib/utils/id';
 import { zustandStorage } from '../lib/adapters/storage';
 import analytics from '../lib/adapters/analytics';
+import { getAPIAdapter } from '../lib/adapters/api';
+import { bootstrapRemoteAccount } from '../lib/sync/bootstrap';
 
 const MIN_PASSWORD_LENGTH = 6;
 const PASSWORD_HASH_VERSION = 1;
@@ -45,6 +47,24 @@ function createSalt() {
     return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
   }
   return `${Date.now().toString(16)}${Math.random().toString(16).slice(2)}`;
+}
+
+function isRemoteAuthMode() {
+  return import.meta.env.VITE_BACKEND === 'supabase';
+}
+
+function buildSupabaseUser(authUser, fallbackName, settings) {
+  const normalizedEmail = normalizeEmail(authUser?.email || '');
+  return {
+    id: authUser?.id,
+    email: normalizedEmail,
+    name: authUser?.user_metadata?.name || fallbackName || normalizedEmail.split('@')[0],
+    avatar: authUser?.user_metadata?.avatar || null,
+    settings: settings || defaultSettings,
+    onboardingCompleted: Boolean(authUser?.user_metadata?.onboardingCompleted),
+    createdAt: authUser?.created_at || new Date().toISOString(),
+    authProvider: 'supabase',
+  };
 }
 
 async function hashPassword(password, salt) {
@@ -91,6 +111,7 @@ const useAuthStore = create(
     (set, get) => ({
       // 상태
       user: null,
+      token: null,
       isAuthenticated: false,
       isLoading: false,
 
@@ -118,6 +139,62 @@ const useAuthStore = create(
           return { success: false, error: `비밀번호는 ${MIN_PASSWORD_LENGTH}자 이상이어야 합니다.` };
         }
 
+        if (isRemoteAuthMode()) {
+          try {
+            const previousUserId = get().user?.id || null;
+            const api = getAPIAdapter();
+            if (typeof api.isConfigured === 'function' && !api.isConfigured()) {
+              set({ isLoading: false });
+              return { success: false, error: 'Supabase 설정이 완료되지 않았습니다.' };
+            }
+
+            const data = await api.signUp(normalizedEmail, password);
+            const authUser = data?.user || data?.session?.user;
+            if (!authUser?.id) {
+              set({ isLoading: false });
+              return { success: false, error: '회원가입에 실패했습니다.' };
+            }
+
+            const user = buildSupabaseUser(authUser, name, defaultSettings);
+            const token = data?.session?.access_token || null;
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+
+            await bootstrapRemoteAccount({
+              previousUserId,
+              nextUserId: user.id,
+            });
+
+            analytics.identify(user.id, {
+              name: user.name,
+              email: user.email,
+              createdAt: user.createdAt,
+              platform: getPlatform(),
+              appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
+            });
+            analytics.setUserProperties({
+              $name: user.name,
+              $email: user.email,
+              signup_date: user.createdAt,
+              platform: getPlatform(),
+              onboarding_completed: user.onboardingCompleted,
+            });
+            analytics.track(analytics.events.AUTH_SIGNUP, {
+              method: getAuthMethod(user.email),
+            });
+
+            return { success: true, user };
+          } catch (error) {
+            set({ isLoading: false });
+            return { success: false, error: error?.message || '회원가입에 실패했습니다.' };
+          }
+        }
+
         const credential = await createCredential(password);
         const user = {
           id: generateId(),
@@ -132,6 +209,7 @@ const useAuthStore = create(
 
         set({
           user,
+          token: null,
           isAuthenticated: true,
           isLoading: false,
         });
@@ -174,6 +252,55 @@ const useAuthStore = create(
           return { success: false, error: '이메일과 비밀번호를 입력해주세요.' };
         }
 
+        if (isRemoteAuthMode()) {
+          try {
+            const previousUserId = get().user?.id || null;
+            const api = getAPIAdapter();
+            if (typeof api.isConfigured === 'function' && !api.isConfigured()) {
+              set({ isLoading: false });
+              return { success: false, error: 'Supabase 설정이 완료되지 않았습니다.' };
+            }
+
+            const data = await api.signIn(normalizedEmail, password);
+            const authUser = data?.user || data?.session?.user;
+            if (!authUser?.id) {
+              set({ isLoading: false });
+              return { success: false, error: '로그인에 실패했습니다.' };
+            }
+
+            const user = buildSupabaseUser(authUser, null, get().user?.settings || defaultSettings);
+            const token = data?.session?.access_token || null;
+
+            set({
+              user,
+              token,
+              isAuthenticated: true,
+              isLoading: false,
+            });
+
+            await bootstrapRemoteAccount({
+              previousUserId,
+              nextUserId: user.id,
+            });
+
+            analytics.identify(user.id, {
+              name: user.name,
+              email: user.email,
+              createdAt: user.createdAt,
+              platform: getPlatform(),
+              appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
+            });
+            analytics.track(analytics.events.AUTH_LOGIN, {
+              method: getAuthMethod(user.email),
+            });
+
+            return { success: true, user };
+          } catch (error) {
+            set({ isLoading: false });
+            return { success: false, error: error?.message || '로그인에 실패했습니다.' };
+          }
+        }
+
         // 로컬 저장된 사용자만 로그인 허용
         const currentUser = get().user;
         if (!currentUser || currentUser.email !== normalizedEmail) {
@@ -213,6 +340,7 @@ const useAuthStore = create(
 
         set({
           isAuthenticated: true,
+          token: null,
           isLoading: false,
         });
 
@@ -238,9 +366,19 @@ const useAuthStore = create(
 
         await new Promise(resolve => setTimeout(resolve, 300));
 
+        if (isRemoteAuthMode()) {
+          try {
+            const api = getAPIAdapter();
+            await api.signOut();
+          } catch {
+            // 세션 제거 실패는 로컬 정리로 복구
+          }
+        }
+
         set({
           isAuthenticated: false,
           isLoading: false,
+          token: null,
           // user는 유지 (다음 로그인 시 복원)
         });
 
@@ -310,6 +448,7 @@ const useAuthStore = create(
       reset: () => {
         set({
           user: null,
+          token: null,
           isAuthenticated: false,
           isLoading: false,
         });
@@ -317,15 +456,20 @@ const useAuthStore = create(
     }),
     {
       name: 'auth',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         user: state.user,
+        token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
       migrate: (persisted, version) => {
         if (version === 0) return { .../** @type {any} */ (persisted) };
-        return persisted;
+        const next = /** @type {any} */ (persisted) || {};
+        return {
+          token: null,
+          ...next,
+        };
       },
     }
   )

@@ -9,6 +9,8 @@ import { getTodayString } from '../lib/utils/date';
 import { createForecast } from '../lib/ai/generateForecast';
 import { zustandStorage } from '../lib/adapters/storage';
 import analytics from '../lib/adapters/analytics';
+import { createSyncMetadata } from '../lib/sync/metadata';
+import { queueDelete, queueUpsert } from '../lib/offline/syncHelpers';
 
 const MAX_FORECASTS = 365;
 const ACTION_SUCCESS_THRESHOLD = 50;
@@ -20,6 +22,51 @@ function toDayNumber(dateStr) {
 function average(values) {
   if (!values.length) return 0;
   return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function uniqueStrings(values = []) {
+  return Array.from(new Set(values.filter(Boolean).map(value => String(value).trim()))).filter(Boolean);
+}
+
+function normalizeExperiment(experiment = {}, prediction = {}) {
+  const plannedSuggestions = uniqueStrings(
+    Array.isArray(experiment?.plannedSuggestions)
+      ? experiment.plannedSuggestions
+      : Array.isArray(prediction?.suggestions)
+        ? prediction.suggestions
+        : [],
+  );
+
+  const selectedActions = uniqueStrings(
+    Array.isArray(experiment?.selectedActions)
+      ? experiment.selectedActions
+      : Array.isArray(experiment?.completedSuggestions)
+        ? experiment.completedSuggestions
+        : [],
+  ).filter(action => plannedSuggestions.includes(action));
+
+  const completionBase = selectedActions.length > 0 ? selectedActions : plannedSuggestions;
+  const completedSuggestions = uniqueStrings(experiment?.completedSuggestions || [])
+    .filter(action => completionBase.includes(action));
+
+  const actionFeedback = Object.fromEntries(
+    Object.entries(experiment?.actionFeedback || {})
+      .filter(([action, feedback]) => completionBase.includes(action) && Boolean(feedback)),
+  );
+
+  const completionRate = completionBase.length > 0
+    ? Math.round((completedSuggestions.length / completionBase.length) * 100)
+    : 0;
+
+  return {
+    plannedSuggestions,
+    selectedActions,
+    completedSuggestions,
+    actionFeedback,
+    completionRate,
+    reviewedAt: experiment?.reviewedAt || null,
+    updatedAt: experiment?.updatedAt || new Date().toISOString(),
+  };
 }
 
 const useForecastStore = create(
@@ -65,19 +112,22 @@ const useForecastStore = create(
             prediction: result.data,
             actual: null,
             accuracy: null,
-            experiment: {
+            experiment: normalizeExperiment({
               plannedSuggestions: suggestions,
+              selectedActions: [],
               completedSuggestions: [],
-              completionRate: 0,
-              updatedAt: new Date().toISOString(),
-            },
+              actionFeedback: {},
+              reviewedAt: null,
+            }, result.data),
             createdAt: new Date().toISOString(),
+            ...createSyncMetadata(),
           };
 
           set((state) => ({
             forecasts: [forecast, ...state.forecasts].slice(0, MAX_FORECASTS),
             isGenerating: false,
           }));
+          queueUpsert('forecasts', forecast);
 
           return forecast;
         } else {
@@ -123,10 +173,14 @@ const useForecastStore = create(
         set((state) => ({
           forecasts: state.forecasts.map(f =>
             f.id === forecastId
-              ? { ...f, actual: normalizedActual, accuracy }
+              ? { ...f, actual: normalizedActual, accuracy, ...createSyncMetadata() }
               : f
           ),
         }));
+        const updatedForecast = get().getForecastById(forecastId);
+        if (updatedForecast) {
+          queueUpsert('forecasts', updatedForecast);
+        }
 
         analytics.track(analytics.events.FORECAST_FEEDBACK, {
           was_accurate: wasAccurate,
@@ -145,37 +199,80 @@ const useForecastStore = create(
           forecasts: state.forecasts.map((forecast) => {
             if (forecast.id !== forecastId) return forecast;
 
-            const planned = Array.isArray(forecast.experiment?.plannedSuggestions)
-              ? forecast.experiment.plannedSuggestions
-              : Array.isArray(forecast.prediction?.suggestions)
-                ? forecast.prediction.suggestions
-                : [];
+            const experiment = normalizeExperiment(forecast.experiment, forecast.prediction);
+            const planned = experiment.plannedSuggestions;
 
             if (!planned.includes(suggestion)) return forecast;
 
-            const completed = Array.isArray(forecast.experiment?.completedSuggestions)
-              ? forecast.experiment.completedSuggestions
-              : [];
+            const nextSelected = experiment.selectedActions.includes(suggestion)
+              ? experiment.selectedActions.filter(action => action !== suggestion)
+              : [...experiment.selectedActions, suggestion];
 
-            const nextCompleted = completed.includes(suggestion)
-              ? completed.filter(s => s !== suggestion)
-              : [...completed, suggestion];
+            const nextCompleted = experiment.completedSuggestions
+              .filter(action => nextSelected.length === 0 || nextSelected.includes(action));
 
-            const completionRate = planned.length > 0
-              ? Math.round((nextCompleted.length / planned.length) * 100)
-              : 0;
+            const nextFeedback = Object.fromEntries(
+              Object.entries(experiment.actionFeedback || {})
+                .filter(([action]) => nextSelected.length === 0 || nextSelected.includes(action)),
+            );
 
             return {
               ...forecast,
-              experiment: {
-                plannedSuggestions: planned,
+              experiment: normalizeExperiment({
+                ...experiment,
+                selectedActions: nextSelected,
                 completedSuggestions: nextCompleted,
-                completionRate,
+                actionFeedback: nextFeedback,
+                reviewedAt: experiment.reviewedAt,
                 updatedAt: new Date().toISOString(),
-              },
+              }, forecast.prediction),
+              ...createSyncMetadata(),
             };
           }),
         }));
+        const updatedForecast = get().getForecastById(forecastId);
+        if (updatedForecast) {
+          queueUpsert('forecasts', updatedForecast);
+        }
+      },
+
+      reviewExperiment: (forecastId, { completedActions = [], actionFeedback = {} } = {}) => {
+        set((state) => ({
+          forecasts: state.forecasts.map((forecast) => {
+            if (forecast.id !== forecastId) return forecast;
+
+            const experiment = normalizeExperiment(forecast.experiment, forecast.prediction);
+            const selectedActions = experiment.selectedActions.length > 0
+              ? experiment.selectedActions
+              : experiment.plannedSuggestions;
+
+            const nextCompleted = uniqueStrings(completedActions)
+              .filter(action => selectedActions.includes(action));
+
+            const nextFeedback = Object.fromEntries(
+              Object.entries(actionFeedback || {})
+                .filter(([action, feedback]) => selectedActions.includes(action) && Boolean(feedback)),
+            );
+
+            return {
+              ...forecast,
+              experiment: normalizeExperiment({
+                ...experiment,
+                selectedActions,
+                completedSuggestions: nextCompleted,
+                actionFeedback: nextFeedback,
+                reviewedAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              }, forecast.prediction),
+              ...createSyncMetadata(),
+            };
+          }),
+        }));
+
+        const updatedForecast = get().getForecastById(forecastId);
+        if (updatedForecast) {
+          queueUpsert('forecasts', updatedForecast);
+        }
       },
 
       /**
@@ -184,7 +281,7 @@ const useForecastStore = create(
        * @returns {Object|undefined}
        */
       getForecastById: (forecastId) => {
-        return get().forecasts.find(f => f.id === forecastId);
+        return get().forecasts.find(f => f.id === forecastId && !f.deletedAt);
       },
 
       /**
@@ -195,7 +292,7 @@ const useForecastStore = create(
        */
       getForecastByDate: (userId, date) => {
         return get().forecasts.find(f =>
-          f.userId === userId && f.date === date
+          f.userId === userId && f.date === date && !f.deletedAt
         );
       },
 
@@ -216,7 +313,7 @@ const useForecastStore = create(
        */
       getRecentForecasts: (userId, limit = 7) => {
         return get().forecasts
-          .filter(f => f.userId === userId)
+          .filter(f => f.userId === userId && !f.deletedAt)
           .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
           .slice(0, limit);
       },
@@ -228,7 +325,7 @@ const useForecastStore = create(
        */
       getVerifiedForecasts: (userId) => {
         return get().forecasts.filter(f =>
-          f.userId === userId && f.accuracy !== null
+          f.userId === userId && !f.deletedAt && f.accuracy !== null
         );
       },
 
@@ -254,9 +351,9 @@ const useForecastStore = create(
         const cutoff = toDayNumber(getTodayString()) - ((days - 1) * 24 * 60 * 60 * 1000);
         const withActual = get().forecasts.filter((forecast) =>
           forecast.userId === userId &&
+          !forecast.deletedAt &&
           typeof forecast.actual?.condition === 'number' &&
-          Array.isArray(forecast.experiment?.plannedSuggestions) &&
-          forecast.experiment.plannedSuggestions.length > 0 &&
+          normalizeExperiment(forecast.experiment, forecast.prediction).plannedSuggestions.length > 0 &&
           toDayNumber(forecast.date) >= cutoff
         );
 
@@ -268,15 +365,33 @@ const useForecastStore = create(
             avgConditionHighCompletion: 0,
             avgConditionLowCompletion: 0,
             improvement: 0,
+            topHelpfulActions: [],
           };
         }
 
-        const highCompletion = withActual.filter(
-          forecast => (forecast.experiment?.completionRate || 0) >= ACTION_SUCCESS_THRESHOLD,
-        );
-        const lowCompletion = withActual.filter(
-          forecast => (forecast.experiment?.completionRate || 0) < ACTION_SUCCESS_THRESHOLD,
-        );
+        const highCompletion = withActual.filter((forecast) => {
+          const experiment = normalizeExperiment(forecast.experiment, forecast.prediction);
+          return experiment.completionRate >= ACTION_SUCCESS_THRESHOLD;
+        });
+        const lowCompletion = withActual.filter((forecast) => {
+          const experiment = normalizeExperiment(forecast.experiment, forecast.prediction);
+          return experiment.completionRate < ACTION_SUCCESS_THRESHOLD;
+        });
+
+        const helpfulActionCounter = {};
+        for (const forecast of withActual) {
+          const experiment = normalizeExperiment(forecast.experiment, forecast.prediction);
+          Object.entries(experiment.actionFeedback || {}).forEach(([action, feedback]) => {
+            if (feedback === 'helpful') {
+              helpfulActionCounter[action] = (helpfulActionCounter[action] || 0) + 1;
+            }
+          });
+        }
+
+        const topHelpfulActions = Object.entries(helpfulActionCounter)
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 3)
+          .map(([action, helpfulCount]) => ({ action, helpfulCount }));
 
         const avgConditionHighCompletion = average(highCompletion.map(f => f.actual.condition));
         const avgConditionLowCompletion = average(lowCompletion.map(f => f.actual.condition));
@@ -288,6 +403,7 @@ const useForecastStore = create(
           avgConditionHighCompletion: Math.round(avgConditionHighCompletion * 10) / 10,
           avgConditionLowCompletion: Math.round(avgConditionLowCompletion * 10) / 10,
           improvement: Math.round((avgConditionHighCompletion - avgConditionLowCompletion) * 10) / 10,
+          topHelpfulActions,
         };
       },
 
@@ -300,6 +416,7 @@ const useForecastStore = create(
         const cutoff = toDayNumber(getTodayString()) - ((days - 1) * 24 * 60 * 60 * 1000);
         const verified = get().forecasts.filter((forecast) =>
           forecast.userId === userId &&
+          !forecast.deletedAt &&
           forecast.actual &&
           toDayNumber(forecast.date) >= cutoff,
         );
@@ -323,9 +440,13 @@ const useForecastStore = create(
        * @param {string} forecastId
        */
       deleteForecast: (forecastId) => {
+        const existing = get().forecasts.find(forecast => forecast.id === forecastId);
         set((state) => ({
           forecasts: state.forecasts.filter(f => f.id !== forecastId),
         }));
+        if (existing) {
+          queueDelete('forecasts', existing);
+        }
       },
 
       /**
@@ -349,14 +470,21 @@ const useForecastStore = create(
     }),
     {
       name: 'forecasts',
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => zustandStorage),
       partialize: (state) => ({
         forecasts: state.forecasts,
       }),
       migrate: (persisted, version) => {
         if (version === 0) return { .../** @type {any} */ (persisted) };
-        return persisted;
+        const next = { .../** @type {any} */ (persisted) };
+        next.forecasts = Array.isArray(next.forecasts)
+          ? next.forecasts.map((forecast) => ({
+            ...forecast,
+            experiment: normalizeExperiment(forecast.experiment, forecast.prediction),
+          }))
+          : [];
+        return next;
       },
     }
   )

@@ -11,6 +11,7 @@ import { analytics, initializeAdapters, setAIAdapter } from './lib/adapters';
 import { initSyncQueue, disposeSyncQueue } from './lib/offline/syncQueue';
 import useFeatureFlagStore from './store/useFeatureFlagStore';
 import useAuthStore from './store/useAuthStore';
+import useSyncStatusStore from './store/useSyncStatusStore';
 import logger from './lib/utils/logger';
 import SentryAdapter from './lib/adapters/analytics/sentry';
 
@@ -29,6 +30,7 @@ function App() {
   useEffect(() => {
     let unsubscribeFlags;
     let unsubscribeAuth;
+    let unsubscribeSync;
     let disposeCapacitor;
 
     async function init() {
@@ -77,6 +79,17 @@ function App() {
           }
         });
 
+        const applySyncTags = (syncState) => {
+          SentryAdapter.setTag('sync_status', syncState.status || 'idle');
+          SentryAdapter.setTag('network_status', syncState.isOnline ? 'online' : 'offline');
+        };
+        applySyncTags(useSyncStatusStore.getState());
+        unsubscribeSync = useSyncStatusStore.subscribe((state, prevState) => {
+          if (state.status !== prevState.status || state.isOnline !== prevState.isOnline) {
+            applySyncTags(state);
+          }
+        });
+
         // 오프라인 동기화 큐 초기화
         await initSyncQueue();
 
@@ -94,6 +107,9 @@ function App() {
       }
       if (typeof unsubscribeAuth === 'function') {
         unsubscribeAuth();
+      }
+      if (typeof unsubscribeSync === 'function') {
+        unsubscribeSync();
       }
       if (typeof disposeCapacitor === 'function') {
         disposeCapacitor().catch(() => {});

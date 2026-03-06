@@ -3,6 +3,7 @@
  */
 import logger from './logger';
 import { maskSensitiveFields } from './mask';
+import SentryAdapter from '../adapters/analytics/sentry';
 
 /**
  * 앱 에러 클래스
@@ -133,19 +134,21 @@ export function normalizeError(error) {
  */
 export function logError(error, context = {}) {
   const normalizedError = normalizeError(error);
+  const safeContext = maskSensitiveFields(context);
 
   // 콘솔 로깅 (개발용) — 민감 필드 마스킹
   logger.error('[AppError]', {
     message: normalizedError.message,
     code: normalizedError.code,
     timestamp: normalizedError.timestamp,
-    context: maskSensitiveFields(context),
+    context: safeContext,
   });
 
-  // TODO: Sentry 연동 (2단계)
-  // if (typeof Sentry !== 'undefined') {
-  //   Sentry.captureException(error, { extra: context });
-  // }
+  SentryAdapter.setTag('error_code', normalizedError.code);
+  SentryAdapter.captureException(error, {
+    error_code: normalizedError.code,
+    context: safeContext,
+  });
 }
 
 /**

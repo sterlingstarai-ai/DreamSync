@@ -22,6 +22,7 @@ const mockState = vi.hoisted(() => ({
     avgConditionHighCompletion: 0,
     avgConditionLowCompletion: 0,
     improvement: 0,
+    topHelpfulActions: [],
   },
   getWeeklyProgress: vi.fn(),
   updateGoals: vi.fn(),
@@ -164,6 +165,7 @@ describe('WeeklyReport', () => {
       avgConditionHighCompletion: 4.3,
       avgConditionLowCompletion: 3.1,
       improvement: 1.2,
+      topHelpfulActions: [{ action: '명상하기', helpfulCount: 2 }],
     };
     mockState.getWeeklyProgress.mockReset();
     mockState.updateGoals.mockReset();
@@ -251,9 +253,10 @@ describe('WeeklyReport', () => {
       avgConditionHighCompletion: 0,
       avgConditionLowCompletion: 0,
       improvement: 0,
+      topHelpfulActions: [],
     };
 
     renderWeeklyReport();
-    expect(screen.getByText('아직 실험 데이터가 부족해요. 대시보드에서 추천 행동을 체크해보세요.')).toBeInTheDocument();
+    expect(screen.getByText('아직 실험 데이터가 부족해요. 대시보드에서 행동을 선택하고 저녁 체크인에서 회수해보세요.')).toBeInTheDocument();
   });
 });

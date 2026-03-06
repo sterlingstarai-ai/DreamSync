@@ -443,7 +443,7 @@ export default function WeeklyReport() {
               <Card padding="lg">
                 {experimentSummary.sampleSize === 0 ? (
                   <p className="text-sm text-[var(--text-muted)]">
-                    아직 실험 데이터가 부족해요. 대시보드에서 추천 행동을 체크해보세요.
+                    아직 실험 데이터가 부족해요. 대시보드에서 행동을 선택하고 저녁 체크인에서 회수해보세요.
                   </p>
                 ) : (
                   <div className="space-y-2">
@@ -464,6 +464,21 @@ export default function WeeklyReport() {
                         {experimentSummary.improvement > 0 ? '+' : ''}{experimentSummary.improvement}
                       </strong>
                     </p>
+                    {experimentSummary.topHelpfulActions?.length > 0 && (
+                      <div className="pt-2">
+                        <p className="text-xs text-[var(--text-muted)] mb-2">가장 도움이 된 행동</p>
+                        <div className="flex flex-wrap gap-2">
+                          {experimentSummary.topHelpfulActions.map((item) => (
+                            <span
+                              key={item.action}
+                              className="rounded-full bg-emerald-500/15 px-2.5 py-1 text-xs text-emerald-300"
+                            >
+                              {item.action} · {item.helpfulCount}회
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </Card>

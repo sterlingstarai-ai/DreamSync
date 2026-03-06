@@ -19,6 +19,7 @@ const EMPTY_EXPERIMENT_SUMMARY = {
   avgConditionHighCompletion: 0,
   avgConditionLowCompletion: 0,
   improvement: 0,
+  topHelpfulActions: [],
 };
 const EMPTY_REVIEW_STATS = {
   verifiedCount: 0,
@@ -56,6 +57,7 @@ export default function useForecast() {
   const getExperimentSummary = useForecastStore(state => state.getExperimentSummary);
   const getReviewStats = useForecastStore(state => state.getReviewStats);
   const toggleActionSuggestion = useForecastStore(state => state.toggleActionSuggestion);
+  const reviewExperiment = useForecastStore(state => state.reviewExperiment);
   const deleteForecast = useForecastStore(state => state.deleteForecast);
   const clearError = useForecastStore(state => state.clearError);
 
@@ -122,7 +124,9 @@ export default function useForecast() {
    */
   const todayActionProgress = useMemo(() => {
     if (!todayForecast) return { total: 0, completed: 0, completionRate: 0 };
-    const planned = todayForecast.experiment?.plannedSuggestions || todayForecast.prediction?.suggestions || [];
+    const planned = todayForecast.experiment?.selectedActions?.length
+      ? todayForecast.experiment.selectedActions
+      : todayForecast.experiment?.plannedSuggestions || todayForecast.prediction?.suggestions || [];
     const completed = todayForecast.experiment?.completedSuggestions || [];
     const completionRate = planned.length > 0
       ? Math.round((completed.length / planned.length) * 100)
@@ -265,6 +269,12 @@ export default function useForecast() {
     toggleActionSuggestion(todayForecast.id, suggestion);
   }, [todayForecast, toggleActionSuggestion]);
 
+  const reviewTodayExperiment = useCallback((payload) => {
+    if (!todayForecast) return false;
+    reviewExperiment(todayForecast.id, payload);
+    return true;
+  }, [todayForecast, reviewExperiment]);
+
   /**
    * 예보 삭제
    */
@@ -310,6 +320,7 @@ export default function useForecast() {
     reviewYesterdayForecast,
     toggleSuggestionCompletion,
     toggleTodaySuggestion,
+    reviewTodayExperiment,
     removeForecast,
     clearError,
   };

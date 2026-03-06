@@ -25,7 +25,7 @@ export default function CheckIn() {
   const navigate = useNavigate();
   const toast = useToast();
   const { checkedInToday, todayLog, submitCheckIn, isLoading, error: checkInError, clearError: clearCheckInError } = useCheckIn();
-  const { recordActualFromCheckIn } = useForecast();
+  const { todayForecast, recordActualFromCheckIn, reviewTodayExperiment } = useForecast();
   const { isEnabled } = useFeatureFlags();
   const getTodaySummary = useSleepStore(state => state.getTodaySummary);
   const setSleepSummary = useSleepStore(state => state.setSleepSummary);
@@ -50,6 +50,20 @@ export default function CheckIn() {
   const [selectedEmotions, setSelectedEmotions] = useState([]);
   const [stressLevel, setStressLevel] = useState(3);
   const [selectedEvents, setSelectedEvents] = useState([]);
+  const selectedActions = useMemo(() => {
+    return todayForecast?.experiment?.selectedActions?.length
+      ? todayForecast.experiment.selectedActions
+      : [];
+  }, [todayForecast]);
+  const [experimentReview, setExperimentReview] = useState({});
+  const resolvedExperimentReview = useMemo(() => {
+    if (selectedActions.length === 0) return experimentReview;
+
+    return selectedActions.reduce((acc, action) => {
+      acc[action] = experimentReview[action] || { completed: false, feedback: null };
+      return acc;
+    }, {});
+  }, [selectedActions, experimentReview]);
 
   // 수면 데이터 상태
   const [sleepData, setSleepData] = useState({
@@ -167,6 +181,16 @@ export default function CheckIn() {
     });
 
     if (result) {
+      if (selectedActions.length > 0) {
+        reviewTodayExperiment({
+          completedActions: selectedActions.filter(action => resolvedExperimentReview[action]?.completed),
+          actionFeedback: Object.fromEntries(
+            selectedActions
+              .filter(action => resolvedExperimentReview[action]?.completed && resolvedExperimentReview[action]?.feedback)
+              .map(action => [action, resolvedExperimentReview[action].feedback]),
+          ),
+        });
+      }
       completedRef.current = true;
       toast.success('체크인 완료!', '오늘 하루도 수고했어요');
       // 예보 정확도 기록
@@ -306,10 +330,27 @@ export default function CheckIn() {
           )}
 
           {currentStep === 'events' && (
-            <EventsStep
-              selected={selectedEvents}
-              onChange={setSelectedEvents}
-            />
+            <div className="space-y-4">
+              <EventsStep
+                selected={selectedEvents}
+                onChange={setSelectedEvents}
+              />
+              {selectedActions.length > 0 && (
+                <ExperimentReviewCard
+                  actions={selectedActions}
+                  review={resolvedExperimentReview}
+                  onUpdate={(action, nextValue) => {
+                    setExperimentReview((prev) => ({
+                      ...prev,
+                      [action]: {
+                        ...(prev[action] || { completed: false, feedback: null }),
+                        ...nextValue,
+                      },
+                    }));
+                  }}
+                />
+              )}
+            </div>
           )}
         </div>
 
@@ -343,6 +384,76 @@ export default function CheckIn() {
 
       <BottomNav />
     </>
+  );
+}
+
+function ExperimentReviewCard({ actions, review, onUpdate }) {
+  return (
+    <Card padding="lg">
+      <div className="mb-3">
+        <p className="text-sm font-medium text-[var(--text-primary)]">행동 실험 회수</p>
+        <p className="text-xs text-[var(--text-secondary)] mt-1">
+          아침에 선택한 행동이 실제로 도움이 됐는지 기록해보세요.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {actions.map((action) => {
+          const state = review[action] || { completed: false, feedback: null };
+          return (
+            <div key={action} className="rounded-xl border border-[var(--border-color)] p-3">
+              <p className="text-sm text-[var(--text-primary)]">{action}</p>
+              <div className="flex flex-wrap gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={() => onUpdate(action, { completed: false, feedback: null })}
+                  className={`text-xs px-2.5 py-1.5 rounded-full border ${
+                    !state.completed
+                      ? 'border-[var(--border-color-hover)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]'
+                      : 'border-[var(--border-color)] text-[var(--text-muted)]'
+                  }`}
+                >
+                  실행 안 함
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate(action, { completed: true, feedback: 'neutral' })}
+                  className={`text-xs px-2.5 py-1.5 rounded-full border ${
+                    state.completed && state.feedback === 'neutral'
+                      ? 'border-blue-500/40 bg-blue-500/15 text-blue-300'
+                      : 'border-[var(--border-color)] text-[var(--text-muted)]'
+                  }`}
+                >
+                  했어요
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate(action, { completed: true, feedback: 'helpful' })}
+                  className={`text-xs px-2.5 py-1.5 rounded-full border ${
+                    state.completed && state.feedback === 'helpful'
+                      ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                      : 'border-[var(--border-color)] text-[var(--text-muted)]'
+                  }`}
+                >
+                  도움 됐어요
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUpdate(action, { completed: true, feedback: 'not_helpful' })}
+                  className={`text-xs px-2.5 py-1.5 rounded-full border ${
+                    state.completed && state.feedback === 'not_helpful'
+                      ? 'border-amber-500/40 bg-amber-500/15 text-amber-300'
+                      : 'border-[var(--border-color)] text-[var(--text-muted)]'
+                  }`}
+                >
+                  별로였어요
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 

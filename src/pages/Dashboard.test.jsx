@@ -11,6 +11,7 @@ const mockState = vi.hoisted(() => ({
   dreams: [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }],
   todayDreams: [],
   recentDreams: [],
+  logs: [],
   checkedInToday: false,
   recentLogs: [],
   checkInStats: { completionRate: 0, streak: 0 },
@@ -51,6 +52,7 @@ vi.mock('../hooks/useDreams', () => ({
 vi.mock('../hooks/useCheckIn', () => ({
   default: () => ({
     checkedInToday: mockState.checkedInToday,
+    logs: mockState.logs,
     recentLogs: mockState.recentLogs,
     stats: mockState.checkInStats,
     error: null,
@@ -128,6 +130,7 @@ describe('Dashboard', () => {
     mockState.dreams = [{ id: 'd1' }, { id: 'd2' }, { id: 'd3' }];
     mockState.todayDreams = [];
     mockState.recentDreams = [];
+    mockState.logs = [];
     mockState.checkedInToday = false;
     mockState.recentLogs = [];
     mockState.checkInStats = { completionRate: 0, streak: 0 };

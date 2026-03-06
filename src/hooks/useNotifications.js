@@ -7,6 +7,7 @@ import { Capacitor } from '@capacitor/core';
 import { LocalNotifications } from '@capacitor/local-notifications';
 import logger from '../lib/utils/logger';
 import analytics from '../lib/adapters/analytics';
+import SentryAdapter from '../lib/adapters/analytics/sentry';
 
 /**
  * 알림 ID 상수
@@ -41,6 +42,8 @@ export default function useNotifications() {
       return granted;
     } catch (error) {
       logger.error('Failed to check notification permission:', error);
+      SentryAdapter.setTag('notification_permission_failure', 'check');
+      SentryAdapter.captureException(error, { context: 'notification_permission_check' });
       return false;
     }
   }, []);
@@ -85,6 +88,7 @@ export default function useNotifications() {
       })
       .catch((error) => {
         logger.error('Failed to register notification click listener:', error);
+        SentryAdapter.captureException(error, { context: 'notification_click_listener' });
       });
 
     return () => {
@@ -110,6 +114,8 @@ export default function useNotifications() {
       return granted;
     } catch (error) {
       logger.error('Failed to request notification permission:', error);
+      SentryAdapter.setTag('notification_permission_failure', 'request');
+      SentryAdapter.captureException(error, { context: 'notification_permission_request' });
       return false;
     }
   }, []);

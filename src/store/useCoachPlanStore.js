@@ -5,6 +5,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { getRecentDays, getTodayString } from '../lib/utils/date';
 import { zustandStorage } from '../lib/adapters/storage';
+import { createSyncMetadata } from '../lib/sync/metadata';
+import { queueUpsert } from '../lib/offline/syncHelpers';
 
 const MAX_DAILY_TASKS = 8;
 
@@ -61,7 +63,8 @@ const useCoachPlanStore = create(
        */
       getPlan: (userId, date) => {
         if (!userId || !date) return null;
-        return get().plansByUser[userId]?.[date] || null;
+        const plan = get().plansByUser[userId]?.[date] || null;
+        return plan?.deletedAt ? null : plan;
       },
 
       /**
@@ -92,11 +95,13 @@ const useCoachPlanStore = create(
             : sanitized;
 
           const nextPlan = {
+            id: existing?.id || `${userId}:${date}`,
+            userId,
             date,
             tasks: mergedTasks,
             completionRate: calcCompletionRate(mergedTasks),
             createdAt: existing?.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            ...createSyncMetadata(),
           };
 
           return {
@@ -110,7 +115,11 @@ const useCoachPlanStore = create(
           };
         });
 
-        return get().getPlan(userId, date);
+        const nextPlan = get().getPlan(userId, date);
+        if (nextPlan) {
+          queueUpsert('coach_plans', nextPlan);
+        }
+        return nextPlan;
       },
 
       /**
@@ -146,12 +155,17 @@ const useCoachPlanStore = create(
                   ...plan,
                   tasks: nextTasks,
                   completionRate: calcCompletionRate(nextTasks),
-                  updatedAt: new Date().toISOString(),
+                  ...createSyncMetadata(),
                 },
               },
             },
           };
         });
+
+        const updatedPlan = get().getPlan(userId, date);
+        if (updatedPlan) {
+          queueUpsert('coach_plans', updatedPlan);
+        }
       },
 
       /**
@@ -172,7 +186,7 @@ const useCoachPlanStore = create(
 
         const dates = new Set(getRecentDays(days));
         const plans = Object.values(get().plansByUser[userId] || {})
-          .filter(plan => dates.has(plan.date));
+          .filter(plan => dates.has(plan.date) && !plan.deletedAt);
 
         const totalTasks = plans.reduce((sum, plan) => sum + (plan.tasks?.length || 0), 0);
         const completedTasks = plans.reduce(

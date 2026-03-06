@@ -24,7 +24,7 @@ export default function Login() {
 
     const result = await signIn({ email, password });
     if (!result.success) {
-      setError('로그인에 실패했습니다.');
+      setError(result.error || '로그인에 실패했습니다.');
     }
   };
 

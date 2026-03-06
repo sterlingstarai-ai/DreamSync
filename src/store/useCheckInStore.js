@@ -8,6 +8,8 @@ import { generateId } from '../lib/utils/id';
 import { getTodayString, getRecentDays, toDateString } from '../lib/utils/date';
 import { zustandStorage } from '../lib/adapters/storage';
 import analytics from '../lib/adapters/analytics';
+import { createSyncMetadata } from '../lib/sync/metadata';
+import { queueDelete, queueUpsert } from '../lib/offline/syncHelpers';
 
 const MAX_CHECKINS = 365;
 
@@ -56,6 +58,7 @@ const useCheckInStore = create(
             events,
             note,
             sleep,
+            ...createSyncMetadata(),
           });
           analytics.track(analytics.events.CHECKIN_COMPLETE, {
             total_duration_sec: durationSec,
@@ -74,12 +77,14 @@ const useCheckInStore = create(
           note: note || null,
           sleep: sleep || null,
           createdAt: new Date().toISOString(),
+          ...createSyncMetadata(),
         };
 
         set((state) => ({
           logs: [log, ...state.logs].slice(0, MAX_CHECKINS),
           isLoading: false,
         }));
+        queueUpsert('daily_logs', log);
 
         analytics.track(analytics.events.CHECKIN_COMPLETE, {
           total_duration_sec: durationSec,
@@ -98,13 +103,17 @@ const useCheckInStore = create(
         set((state) => ({
           logs: state.logs.map(log =>
             log.id === logId
-              ? { ...log, ...updates }
+              ? { ...log, ...updates, ...createSyncMetadata(updates) }
               : log
           ),
           isLoading: false,
         }));
 
-        return get().logs.find(log => log.id === logId);
+        const updated = get().logs.find(log => log.id === logId && !log.deletedAt);
+        if (updated) {
+          queueUpsert('daily_logs', updated);
+        }
+        return updated;
       },
 
       /**
@@ -112,9 +121,13 @@ const useCheckInStore = create(
        * @param {string} logId
        */
       deleteCheckIn: (logId) => {
+        const existing = get().logs.find(log => log.id === logId);
         set((state) => ({
           logs: state.logs.filter(log => log.id !== logId),
         }));
+        if (existing) {
+          queueDelete('daily_logs', existing);
+        }
       },
 
       /**
@@ -123,7 +136,7 @@ const useCheckInStore = create(
        * @returns {Object|undefined}
        */
       getLogById: (logId) => {
-        return get().logs.find(log => log.id === logId);
+        return get().logs.find(log => log.id === logId && !log.deletedAt);
       },
 
       /**
@@ -134,7 +147,7 @@ const useCheckInStore = create(
        */
       getLogByDate: (userId, date) => {
         return get().logs.find(log =>
-          log.userId === userId && log.date === date
+          log.userId === userId && log.date === date && !log.deletedAt
         );
       },
 
@@ -165,7 +178,7 @@ const useCheckInStore = create(
       getRecentLogs: (userId, days = 7) => {
         const dates = getRecentDays(days);
         return get().logs.filter(log =>
-          log.userId === userId && dates.includes(log.date)
+          log.userId === userId && !log.deletedAt && dates.includes(log.date)
         ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       },
 
@@ -175,7 +188,7 @@ const useCheckInStore = create(
        * @returns {number}
        */
       getStreak: (userId) => {
-        const logs = get().logs.filter(log => log.userId === userId);
+        const logs = get().logs.filter(log => log.userId === userId && !log.deletedAt);
         const dates = new Set(logs.map(log => log.date));
 
         let streak = 0;

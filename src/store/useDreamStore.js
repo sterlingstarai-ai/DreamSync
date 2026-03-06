@@ -11,6 +11,8 @@ import { zustandStorage } from '../lib/adapters/storage';
 import logger from '../lib/utils/logger';
 import useSymbolStore from './useSymbolStore';
 import analytics from '../lib/adapters/analytics';
+import { createSyncMetadata } from '../lib/sync/metadata';
+import { queueDelete, queueUpsert } from '../lib/offline/syncHelpers';
 
 const MAX_DREAMS = 500;
 
@@ -44,13 +46,14 @@ const useDreamStore = create(
           date: getTodayString(),
           analysis: null,
           createdAt: now,
-          updatedAt: now,
+          ...createSyncMetadata({ updatedAt: now }),
         };
 
         set((state) => ({
           dreams: [dream, ...state.dreams].slice(0, MAX_DREAMS),
           isLoading: false,
         }));
+        queueUpsert('dreams', dream);
 
         analytics.track(analytics.events.DREAM_CREATE_COMPLETE, {
           content_length: content.length,
@@ -89,11 +92,15 @@ const useDreamStore = create(
           set((state) => ({
             dreams: state.dreams.map(d =>
               d.id === dreamId
-                ? { ...d, analysis, updatedAt: new Date().toISOString() }
+                ? { ...d, analysis, ...createSyncMetadata() }
                 : d
             ),
             isAnalyzing: false,
           }));
+          const updatedDream = get().getDreamById(dreamId);
+          if (updatedDream) {
+            queueUpsert('dreams', updatedDream);
+          }
 
           // 분석 성공 시 심볼 사전 자동 동기화
           if (dream.userId && Array.isArray(analysis?.symbols) && analysis.symbols.length > 0) {
@@ -125,10 +132,14 @@ const useDreamStore = create(
         set((state) => ({
           dreams: state.dreams.map(d =>
             d.id === dreamId
-              ? { ...d, content, updatedAt: new Date().toISOString() }
+              ? { ...d, content, ...createSyncMetadata() }
               : d
           ),
         }));
+        const updatedDream = get().getDreamById(dreamId);
+        if (updatedDream) {
+          queueUpsert('dreams', updatedDream);
+        }
       },
 
       /**
@@ -167,6 +178,10 @@ const useDreamStore = create(
             }
           }
         }
+
+        if (dream) {
+          queueDelete('dreams', dream);
+        }
       },
 
       /**
@@ -175,7 +190,7 @@ const useDreamStore = create(
        * @returns {Object|undefined}
        */
       getDreamById: (dreamId) => {
-        return get().dreams.find(d => d.id === dreamId);
+        return get().dreams.find(d => d.id === dreamId && !d.deletedAt);
       },
 
       /**
@@ -184,7 +199,7 @@ const useDreamStore = create(
        * @returns {Array}
        */
       getDreamsByUser: (userId) => {
-        return get().dreams.filter(d => d.userId === userId);
+        return get().dreams.filter(d => d.userId === userId && !d.deletedAt);
       },
 
       /**
@@ -199,6 +214,7 @@ const useDreamStore = create(
 
         return get().dreams.filter(d =>
           d.userId === userId &&
+          !d.deletedAt &&
           new Date(d.createdAt) >= cutoffDate
         );
       },
@@ -212,6 +228,7 @@ const useDreamStore = create(
         const today = getTodayString();
         return get().dreams.filter(d =>
           d.userId === userId &&
+          !d.deletedAt &&
           toDateString(new Date(d.createdAt)) === today
         );
       },
@@ -225,6 +242,7 @@ const useDreamStore = create(
       getDreamsByDate: (userId, date) => {
         return get().dreams.filter(d =>
           d.userId === userId &&
+          !d.deletedAt &&
           toDateString(new Date(d.createdAt)) === date
         );
       },
@@ -235,7 +253,7 @@ const useDreamStore = create(
        * @returns {Array}
        */
       getAllSymbols: (userId) => {
-        const dreams = get().dreams.filter(d => d.userId === userId && d.analysis);
+        const dreams = get().dreams.filter(d => d.userId === userId && !d.deletedAt && d.analysis);
         const symbolMap = new Map();
 
         for (const dream of dreams) {

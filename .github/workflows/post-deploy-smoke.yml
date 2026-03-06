@@ -1,0 +1,38 @@
+name: Post Deploy Smoke
+
+on:
+  deployment_status:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: Smoke test target URL
+        required: true
+        type: string
+
+jobs:
+  smoke:
+    if: github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      PLAYWRIGHT_BASE_URL: ${{ github.event.inputs.base_url || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Resolve smoke target
+        run: |
+          if [ -z "$PLAYWRIGHT_BASE_URL" ]; then
+            echo "PLAYWRIGHT_BASE_URL is required for post-deploy smoke tests."
+            exit 1
+          fi
+          echo "Smoke target: $PLAYWRIGHT_BASE_URL"
+
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run test:e2e:smoke

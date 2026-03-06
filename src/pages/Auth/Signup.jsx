@@ -37,7 +37,7 @@ export default function Signup() {
 
     const result = await signUp({ email, password, name });
     if (!result.success) {
-      setError('회원가입에 실패했습니다.');
+      setError(result.error || '회원가입에 실패했습니다.');
     }
   };
 

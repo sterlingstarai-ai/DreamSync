@@ -15,12 +15,14 @@ import { DreamAnalysisSchema, ForecastPredictionSchema } from '../../ai/schemas'
 import { generateMockDreamAnalysis, generateMockForecast } from '../../ai/mock';
 import logger from '../../utils/logger';
 import storage from '../storage';
+import SentryAdapter from '../analytics/sentry';
 
 // ─── 설정 ──────────────────────────────────────────
 
 const EDGE_URL = import.meta.env.VITE_EDGE_FUNCTION_URL;
 const MAX_FALLBACK = 5;
 const REQUEST_TIMEOUT_MS = 15_000;
+const ALLOW_MOCK_FALLBACK = !import.meta.env.PROD;
 
 let fallbackCount = 0;
 
@@ -126,8 +128,17 @@ async function callEdgeFunction(type, payload) {
     fallbackCount++;
     if (fallbackCount > MAX_FALLBACK) {
       logger.warn('[EdgeAI] Mock fallback 횟수 초과', { fallbackCount });
+      SentryAdapter.setTag('ai_failure_mode', 'degraded');
       throw new AppError(
         'AI 서비스를 일시적으로 사용할 수 없습니다.',
+        ERROR_CODES.AI_UNAVAILABLE,
+      );
+    }
+
+    if (!ALLOW_MOCK_FALLBACK) {
+      SentryAdapter.setTag('ai_failure_mode', 'degraded');
+      throw new AppError(
+        'AI 브리프가 일시적으로 중단되었습니다. 잠시 후 다시 시도해주세요.',
         ERROR_CODES.AI_UNAVAILABLE,
       );
     }
@@ -169,6 +180,13 @@ export const EdgeAIAdapter = {
         errors: validation.error?.issues?.length,
       });
       fallbackCount++;
+      if (!ALLOW_MOCK_FALLBACK) {
+        SentryAdapter.setTag('ai_failure_mode', 'schema_mismatch');
+        throw new AppError(
+          'AI 브리프가 일시적으로 중단되었습니다. 잠시 후 다시 시도해주세요.',
+          ERROR_CODES.AI_PARSE_ERROR,
+        );
+      }
       return generateMockDreamAnalysis(content);
     }
 
@@ -200,6 +218,13 @@ export const EdgeAIAdapter = {
     if (!validation.success) {
       logger.warn('[EdgeAI] 예보 스키마 불일치, mock fallback');
       fallbackCount++;
+      if (!ALLOW_MOCK_FALLBACK) {
+        SentryAdapter.setTag('ai_failure_mode', 'schema_mismatch');
+        throw new AppError(
+          'AI 브리프가 일시적으로 중단되었습니다. 잠시 후 다시 시도해주세요.',
+          ERROR_CODES.AI_PARSE_ERROR,
+        );
+      }
       const logs = recentCheckIns.length > 0
         ? recentCheckIns
         : avgCondition ? [{ condition: avgCondition, stressLevel: avgStress || 3 }] : [];

@@ -184,6 +184,8 @@ export const analytics = {
     REPORT_SHARE: 'report_share',
     NOTIFICATION_CLICK: 'notification_click',
     SETTINGS_CHANGE: 'settings_change',
+    RECOVERY_PROMPT_VIEW: 'recovery_prompt_view',
+    RECOVERY_REENTRY: 'recovery_reentry',
 
     // Legacy aliases
     SIGN_UP: 'auth_signup',

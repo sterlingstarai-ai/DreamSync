@@ -7,6 +7,8 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { generateId } from '../lib/utils/id';
 import { getTodayString } from '../lib/utils/date';
 import { zustandStorage } from '../lib/adapters/storage';
+import { createSyncMetadata } from '../lib/sync/metadata';
+import { queueDelete, queueUpsert } from '../lib/offline/syncHelpers';
 
 const useSymbolStore = create(
   persist(
@@ -44,11 +46,15 @@ const useSymbolStore = create(
                     count: nextDreamIds.length,
                     dreamIds: nextDreamIds,
                     lastSeen: today,
-                    updatedAt: new Date().toISOString(),
+                    ...createSyncMetadata(),
                   }
                 : s
             ),
           }));
+          const updatedSymbol = get().getSymbolById(existing.id);
+          if (updatedSymbol) {
+            queueUpsert('personal_symbols', updatedSymbol);
+          }
         } else {
           // 새 심볼 추가
           const symbol = {
@@ -61,12 +67,13 @@ const useSymbolStore = create(
             firstSeen: today,
             lastSeen: today,
             createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
+            ...createSyncMetadata(),
           };
 
           set((state) => ({
             symbols: [...state.symbols, symbol],
           }));
+          queueUpsert('personal_symbols', symbol);
         }
       },
 
@@ -79,10 +86,14 @@ const useSymbolStore = create(
         set((state) => ({
           symbols: state.symbols.map(s =>
             s.id === symbolId
-              ? { ...s, meaning, updatedAt: new Date().toISOString() }
+              ? { ...s, meaning, ...createSyncMetadata() }
               : s
           ),
         }));
+        const updatedSymbol = get().getSymbolById(symbolId);
+        if (updatedSymbol) {
+          queueUpsert('personal_symbols', updatedSymbol);
+        }
       },
 
       /**
@@ -90,9 +101,13 @@ const useSymbolStore = create(
        * @param {string} symbolId
        */
       deleteSymbol: (symbolId) => {
+        const existing = get().symbols.find(symbol => symbol.id === symbolId);
         set((state) => ({
           symbols: state.symbols.filter(s => s.id !== symbolId),
         }));
+        if (existing) {
+          queueDelete('personal_symbols', existing);
+        }
       },
 
       /**
@@ -101,7 +116,7 @@ const useSymbolStore = create(
        * @returns {Object|undefined}
        */
       getSymbolById: (symbolId) => {
-        return get().symbols.find(s => s.id === symbolId);
+        return get().symbols.find(s => s.id === symbolId && !s.deletedAt);
       },
 
       /**
@@ -112,7 +127,7 @@ const useSymbolStore = create(
        */
       getSymbolByName: (userId, name) => {
         return get().symbols.find(s =>
-          s.userId === userId && s.name === name
+          s.userId === userId && s.name === name && !s.deletedAt
         );
       },
 
@@ -123,7 +138,7 @@ const useSymbolStore = create(
        */
       getUserSymbols: (userId) => {
         return get().symbols
-          .filter(s => s.userId === userId)
+          .filter(s => s.userId === userId && !s.deletedAt)
           .sort((a, b) => b.count - a.count);
       },
 
@@ -145,7 +160,7 @@ const useSymbolStore = create(
        */
       getRecentSymbols: (userId, limit = 10) => {
         return get().symbols
-          .filter(s => s.userId === userId)
+          .filter(s => s.userId === userId && !s.deletedAt)
           .sort((a, b) => new Date(b.lastSeen).getTime() - new Date(a.lastSeen).getTime())
           .slice(0, limit);
       },
@@ -160,6 +175,7 @@ const useSymbolStore = create(
         const lowerQuery = query.toLowerCase();
         return get().symbols.filter(s =>
           s.userId === userId &&
+          !s.deletedAt &&
           (s.name.toLowerCase().includes(lowerQuery) ||
            s.meaning.toLowerCase().includes(lowerQuery))
         );
@@ -190,7 +206,7 @@ const useSymbolStore = create(
        * @returns {number}
        */
       getTotalSymbolCount: (userId) => {
-        return get().symbols.filter(s => s.userId === userId).length;
+        return get().symbols.filter(s => s.userId === userId && !s.deletedAt).length;
       },
 
       /**

@@ -22,7 +22,7 @@ import useFeatureFlags from '../hooks/useFeatureFlags';
 import useSleepStore from '../store/useSleepStore';
 import useGoalStore from '../store/useGoalStore';
 import useCoachPlanStore from '../store/useCoachPlanStore';
-import { formatFriendlyDate } from '../lib/utils/date';
+import { formatFriendlyDate, getTodayString } from '../lib/utils/date';
 import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast';
 import { detectPatternAlerts } from '../lib/services/patternAlertService';
 import { buildCoachPlan, getCoachPlanCompletion } from '../lib/services/coachPlanService';
@@ -35,6 +35,7 @@ export default function Dashboard() {
   const user = useAuthStore(useShallow(state => state.user));
   const { dreams, todayDreams, recentDreams, error: dreamError, clearError: clearDreamError } = useDreams();
   const {
+    logs,
     checkedInToday,
     recentLogs,
     stats: checkInStats,
@@ -73,6 +74,7 @@ export default function Dashboard() {
   const isBeginner = dashboardLevel === 'beginner';
   const isActive = dashboardLevel === 'active';
   const isAdvanced = dashboardLevel === 'advanced';
+  const recoveryTrackedRef = useRef(false);
 
   const greeting = getGreeting();
   const userName = user?.name || '사용자';
@@ -82,6 +84,54 @@ export default function Dashboard() {
       recentDreams,
     });
   }, [recentLogs, recentDreams]);
+  const primaryDream = todayDreams[0] || recentDreams[0] || null;
+
+  const inactivityDays = useMemo(() => {
+    const timestamps = [
+      ...dreams.map((dream) => dream.updatedAt || dream.createdAt),
+      ...logs.map((log) => `${log.date}T23:59:59`),
+    ]
+      .map((value) => new Date(value).getTime())
+      .filter((value) => Number.isFinite(value));
+
+    if (timestamps.length === 0) return 0;
+
+    const lastActivityMs = Math.max(...timestamps);
+    const todayMs = new Date(`${getTodayString()}T23:59:59`).getTime();
+    return Math.max(0, Math.floor((todayMs - lastActivityMs) / (24 * 60 * 60 * 1000)));
+  }, [dreams, logs]);
+
+  const recoveryMode = useMemo(() => {
+    if (checkedInToday || todayDreams.length > 0 || inactivityDays < 3) return null;
+
+    if (inactivityDays >= 14) {
+      return {
+        level: 'high',
+        badge: 'Recovery Mode',
+        title: `${inactivityDays}일 만의 복귀예요`,
+        description: '다시 완벽하게 하려 하지 말고, 오늘은 30초 체크인 하나만 완료해도 충분합니다.',
+        ctaLabel: '체크인으로 다시 시작',
+      };
+    }
+
+    if (inactivityDays >= 7) {
+      return {
+        level: 'medium',
+        badge: 'Recovery Mode',
+        title: '루틴을 가볍게 다시 켜볼 시간이에요',
+        description: '최근 흐름이 비어 있어요. 오늘 체크인 하나로 다시 패턴을 이어볼 수 있습니다.',
+        ctaLabel: '오늘 체크인하기',
+      };
+    }
+
+    return {
+      level: 'low',
+      badge: 'Recovery Mode',
+      title: '루틴이 잠깐 멈췄어요',
+      description: '지금 가장 작은 행동 하나만 다시 시작해보세요. 오늘 체크인이 가장 빠른 복귀점입니다.',
+      ctaLabel: '30초 체크인',
+    };
+  }, [checkedInToday, todayDreams.length, inactivityDays]);
 
   const goalProgress = useMemo(() => {
     if (!user?.id) return null;
@@ -176,6 +226,15 @@ export default function Dashboard() {
     });
   }, [dreamCount, streak, isBeginner, isActive]);
 
+  useEffect(() => {
+    if (!recoveryMode || recoveryTrackedRef.current) return;
+    analytics.track(analytics.events.RECOVERY_PROMPT_VIEW, {
+      inactivity_days: inactivityDays,
+      level: recoveryMode.level,
+    });
+    recoveryTrackedRef.current = true;
+  }, [recoveryMode, inactivityDays]);
+
   return (
     <>
       <PageContainer className="pb-24">
@@ -203,25 +262,30 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Today's Forecast Card */}
-        {!isBeginner && patternAlerts.length > 0 && (
-          <section className="mb-4">
-            <PatternAlertCard alerts={patternAlerts} />
-          </section>
-        )}
-
-        {!isBeginner && (
-          <section className="mb-6">
-            <ForecastCard
-              forecast={todayForecast}
-              isLoading={isGenerating}
-              confidence={calculatedConfidence}
-              hasMinimumData={hasMinimumData}
-              onToggleSuggestion={toggleTodaySuggestion}
-              actionProgress={todayActionProgress}
-            />
-          </section>
-        )}
+        <section className="mb-6">
+          <ForecastCard
+            forecast={todayForecast}
+            isLoading={isGenerating}
+            confidence={calculatedConfidence}
+            hasMinimumData={hasMinimumData}
+            error={forecastError}
+            onToggleSuggestion={toggleTodaySuggestion}
+            actionProgress={todayActionProgress}
+            todayDream={primaryDream}
+            topAlert={patternAlerts[0] || null}
+            recoveryMode={recoveryMode}
+            onRetry={createTodayForecast}
+            onPrimaryAction={() => {
+              if (recoveryMode) {
+                analytics.track(analytics.events.RECOVERY_REENTRY, {
+                  inactivity_days: inactivityDays,
+                  level: recoveryMode.level,
+                });
+              }
+              navigate(recoveryMode ? '/checkin' : todayDreams.length === 0 ? '/dream' : '/checkin');
+            }}
+          />
+        </section>
 
         {!isBeginner && todayCoachPlan?.tasks?.length > 0 && (
           <section className="mb-6">
@@ -398,12 +462,18 @@ function ForecastCard({
   isLoading,
   confidence,
   hasMinimumData,
+  error,
   onToggleSuggestion,
   actionProgress,
+  todayDream,
+  topAlert,
+  recoveryMode,
+  onRetry,
+  onPrimaryAction,
 }) {
   if (isLoading) {
     return (
-      <Card variant="gradient" padding="lg">
+      <Card variant="gradient" padding="lg" data-testid="morning-brief">
         <div className="space-y-3">
           <Skeleton className="h-6 w-24" />
           <Skeleton className="h-8 w-32" />
@@ -413,20 +483,65 @@ function ForecastCard({
     );
   }
 
+  const dreamSummary = todayDream?.analysis?.interpretation
+    || (todayDream?.content ? `${todayDream.content.slice(0, 72)}${todayDream.content.length > 72 ? '…' : ''}` : null);
+
   if (!forecast) {
     return (
-      <Card variant="gradient" padding="lg">
-        <div className="flex items-center gap-3">
-          <Sparkles className="w-8 h-8 text-violet-400" />
-          <div>
-            <h3 className="font-semibold text-[var(--text-primary)]">
-              {hasMinimumData ? '오늘의 예보 준비 중' : '첫 예보를 기다리고 있어요'}
-            </h3>
-            <p className="text-sm text-[var(--text-secondary)]">
-              {hasMinimumData
-                ? '데이터가 쌓이면 예측 정확도가 높아져요'
-                : '첫 꿈이나 체크인을 기록하면 예보가 시작됩니다'}
-            </p>
+      <Card variant="gradient" padding="lg" data-testid="morning-brief">
+        <div className="space-y-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.24em] text-violet-200/70">Morning Brief</p>
+              <h3 className="font-semibold text-[var(--text-primary)] mt-1">
+                {recoveryMode
+                  ? recoveryMode.title
+                  : error ? 'AI 브리프가 잠시 쉬고 있어요'
+                    : hasMinimumData ? '오늘의 예보 준비 중' : '첫 예보를 기다리고 있어요'}
+              </h3>
+              <p className="text-sm text-[var(--text-secondary)] mt-2">
+                {recoveryMode
+                  ? recoveryMode.description
+                  : error
+                    ? '실제 AI 연결에 문제가 있어 mock 결과로 대체하지 않았습니다. 잠시 후 다시 시도해주세요.'
+                  : hasMinimumData
+                    ? '데이터가 쌓이면 예측 정확도가 높아져요'
+                    : '첫 꿈이나 체크인을 기록하면 예보가 시작됩니다'}
+              </p>
+            </div>
+            <Sparkles className="w-8 h-8 text-violet-300 flex-shrink-0" />
+          </div>
+
+          {dreamSummary && (
+            <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-3">
+              <p className="text-xs text-violet-200/70 mb-1">최근 꿈 한 줄</p>
+              <p className="text-sm text-[var(--text-primary)]">{dreamSummary}</p>
+            </div>
+          )}
+
+          {topAlert && (
+            <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+              <p className="text-xs text-amber-200/80 mb-1">오늘의 주의 포인트</p>
+              <p className="text-sm font-medium text-amber-100">{topAlert.title}</p>
+              <p className="text-sm text-amber-100/90 mt-1">{topAlert.description}</p>
+            </div>
+          )}
+
+          {recoveryMode && (
+            <div className="inline-flex items-center rounded-full bg-amber-500/15 px-3 py-1 text-xs text-amber-200">
+              {recoveryMode.badge}
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={onPrimaryAction}>
+              {recoveryMode ? recoveryMode.ctaLabel : hasMinimumData ? '체크인하러 가기' : '오늘 첫 기록 시작'}
+            </Button>
+            {error && (
+              <Button variant="secondary" onClick={onRetry}>
+                다시 시도
+              </Button>
+            )}
           </div>
         </div>
       </Card>
@@ -435,12 +550,15 @@ function ForecastCard({
 
   const { prediction } = forecast;
   const conditionColor = getConditionColor(prediction.condition);
+  const selectedActions = Array.isArray(forecast.experiment?.selectedActions)
+    ? forecast.experiment.selectedActions
+    : [];
 
   return (
-    <Card variant="gradient" padding="lg">
+    <Card variant="gradient" padding="lg" data-testid="morning-brief">
       <div className="flex items-start justify-between mb-4">
         <div>
-          <p className="text-sm text-[var(--text-muted)] mb-1">오늘의 예보</p>
+          <p className="text-xs uppercase tracking-[0.24em] text-violet-200/70 mb-2">Morning Brief</p>
           <div className="flex items-center gap-2">
             <span
               className="text-2xl font-bold"
@@ -461,37 +579,68 @@ function ForecastCard({
         </div>
       </div>
 
-      <p className="text-[var(--text-secondary)] text-sm mb-3">
-        {prediction.summary}
-      </p>
+      <div className="space-y-3 mb-4">
+        <p className="text-[var(--text-secondary)] text-sm">
+          {prediction.summary}
+        </p>
+
+        {dreamSummary && (
+          <div className="rounded-xl bg-white/5 border border-white/10 px-3 py-3">
+            <p className="text-xs text-violet-200/70 mb-1">어젯밤 꿈에서 건진 힌트</p>
+            <p className="text-sm text-[var(--text-primary)]">{dreamSummary}</p>
+          </div>
+        )}
+
+        {topAlert && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-3">
+            <p className="text-xs text-amber-200/80 mb-1">오늘의 주의 포인트</p>
+            <p className="text-sm font-medium text-amber-100">{topAlert.title}</p>
+            <p className="text-sm text-amber-100/90 mt-1">{topAlert.description}</p>
+          </div>
+        )}
+
+        {recoveryMode && (
+          <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3 py-3">
+            <p className="text-xs text-emerald-200/80 mb-1">{recoveryMode.badge}</p>
+            <p className="text-sm text-emerald-100">{recoveryMode.description}</p>
+          </div>
+        )}
+      </div>
 
       {prediction.suggestions.length > 0 && (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <p className="text-xs text-[var(--text-muted)]">오늘의 추천 행동</p>
+            <p className="text-xs text-[var(--text-muted)]">오늘 해볼 행동 1-2개</p>
             <p className="text-xs text-violet-300">
-              {actionProgress?.completed || 0}/{actionProgress?.total || prediction.suggestions.length} 실천
+              {selectedActions.length}/{prediction.suggestions.length} 선택
             </p>
           </div>
           <div className="space-y-1.5">
             {prediction.suggestions.map((suggestion, i) => {
-              const completed = (forecast.experiment?.completedSuggestions || []).includes(suggestion);
+              const selected = selectedActions.includes(suggestion);
               return (
                 <button
                   key={i}
                   onClick={() => onToggleSuggestion?.(suggestion)}
+                  data-testid="forecast-suggestion"
                   className={`w-full text-left text-xs px-2.5 py-2 rounded-lg border transition-colors ${
-                    completed
+                    selected
                       ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40'
                       : 'bg-violet-500/10 text-violet-300 border-violet-500/20 hover:bg-violet-500/20'
                   }`}
                 >
-                  {completed ? '✓ ' : ''}{suggestion}
+                  {selected ? '✓ ' : ''}{suggestion}
                 </button>
               );
             })}
           </div>
         </div>
+      )}
+
+      {actionProgress?.completed > 0 && (
+        <p className="text-xs text-emerald-200/80 mt-3">
+          어제 선택한 행동 중 {actionProgress.completed}개가 저녁 회수로 기록되었습니다.
+        </p>
       )}
 
       <p className="text-xs text-[var(--text-muted)] mt-3 opacity-70">

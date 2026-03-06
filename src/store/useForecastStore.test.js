@@ -157,13 +157,36 @@ describe('useForecastStore', () => {
 
     useForecastStore.getState().toggleActionSuggestion(forecast.id, '명상하기');
     let updated = useForecastStore.getState().getForecastById(forecast.id);
-    expect(updated.experiment.completedSuggestions).toEqual(['명상하기']);
-    expect(updated.experiment.completionRate).toBe(50);
+    expect(updated.experiment.selectedActions).toEqual(['명상하기']);
+    expect(updated.experiment.completedSuggestions).toEqual([]);
+    expect(updated.experiment.completionRate).toBe(0);
 
     useForecastStore.getState().toggleActionSuggestion(forecast.id, '명상하기');
     updated = useForecastStore.getState().getForecastById(forecast.id);
+    expect(updated.experiment.selectedActions).toEqual([]);
     expect(updated.experiment.completedSuggestions).toEqual([]);
     expect(updated.experiment.completionRate).toBe(0);
+  });
+
+  it('should review experiment actions separately from selection', async () => {
+    const forecast = await useForecastStore.getState().generateForecast({
+      userId: 'user-1',
+      recentDreams: [],
+      recentLogs: [],
+    });
+
+    useForecastStore.getState().toggleActionSuggestion(forecast.id, '명상하기');
+    useForecastStore.getState().reviewExperiment(forecast.id, {
+      completedActions: ['명상하기'],
+      actionFeedback: { '명상하기': 'helpful' },
+    });
+
+    const updated = useForecastStore.getState().getForecastById(forecast.id);
+    expect(updated.experiment.selectedActions).toEqual(['명상하기']);
+    expect(updated.experiment.completedSuggestions).toEqual(['명상하기']);
+    expect(updated.experiment.actionFeedback).toEqual({ '명상하기': 'helpful' });
+    expect(updated.experiment.reviewedAt).toBeTruthy();
+    expect(updated.experiment.completionRate).toBe(100);
   });
 
   it('should compute experiment summary and review stats', () => {
