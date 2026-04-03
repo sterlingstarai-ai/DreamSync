@@ -190,12 +190,20 @@ describe('useForecastStore', () => {
   });
 
   it('should compute experiment summary and review stats', () => {
+    // 오늘 기준 상대 날짜 사용 (30일 윈도우 내)
+    const today = new Date();
+    const day1 = new Date(today);
+    day1.setDate(today.getDate() - 1);
+    const day2 = new Date(today);
+    day2.setDate(today.getDate() - 2);
+    const toDateStr = (d) => d.toISOString().slice(0, 10);
+
     useForecastStore.setState({
       forecasts: [
         {
           id: 'f1',
           userId: 'user-1',
-          date: '2026-02-16',
+          date: toDateStr(day1),
           prediction: { condition: 4, suggestions: ['명상하기', '산책하기'] },
           actual: { condition: 4, outcome: 'hit', reasons: ['수면이 좋아서'] },
           accuracy: 100,
@@ -204,12 +212,12 @@ describe('useForecastStore', () => {
             completedSuggestions: ['명상하기', '산책하기'],
             completionRate: 100,
           },
-          createdAt: '2026-02-16T07:00:00.000Z',
+          createdAt: day1.toISOString(),
         },
         {
           id: 'f2',
           userId: 'user-1',
-          date: '2026-02-15',
+          date: toDateStr(day2),
           prediction: { condition: 4, suggestions: ['명상하기', '산책하기'] },
           actual: { condition: 2, outcome: 'miss', reasons: ['수면이 부족해서'] },
           accuracy: 50,
@@ -218,7 +226,7 @@ describe('useForecastStore', () => {
             completedSuggestions: [],
             completionRate: 0,
           },
-          createdAt: '2026-02-15T07:00:00.000Z',
+          createdAt: day2.toISOString(),
         },
       ],
     });
