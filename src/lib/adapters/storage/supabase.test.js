@@ -69,4 +69,21 @@ describe('SupabaseStorageAdapter mapping', () => {
       sourceDeviceId: 'device-a',
     });
   });
+
+  it('throws a helpful error when required row fields are missing', () => {
+    expect(() => serializeEntityRecord('dreams', {
+      id: 'dream-2',
+      content: '계약이 깨진 테스트',
+    })).toThrow('[Supabase] dreams row contract mismatch');
+  });
+
+  it('throws a helpful error when required record fields are missing', () => {
+    expect(() => deserializeEntityRecord('daily_logs', {
+      id: 'log-1',
+      log_date: '2026-03-07',
+      created_at: '2026-03-07T07:00:00.000Z',
+      updated_at: '2026-03-07T21:00:00.000Z',
+      source_device_id: 'device-a',
+    })).toThrow('[Supabase] daily_logs record contract mismatch');
+  });
 });

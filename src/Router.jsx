@@ -1,8 +1,8 @@
 /**
  * 앱 라우터 설정
  */
-import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense, useEffect, useLayoutEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { WifiOff } from 'lucide-react';
 import useAuthStore from './store/useAuthStore';
 import useNetworkStatus from './hooks/useNetworkStatus';
@@ -113,9 +113,31 @@ function SyncBanner() {
   return null;
 }
 
+function ScrollToTopOnRouteChange() {
+  const { pathname, search } = useLocation();
+
+  useEffect(() => {
+    if (!('scrollRestoration' in window.history)) return undefined;
+
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = 'manual';
+
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname, search]);
+
+  return null;
+}
+
 export default function Router() {
   return (
     <BrowserRouter>
+      <ScrollToTopOnRouteChange />
       <OfflineBanner />
       <SyncBanner />
       <Suspense fallback={<PageLoading message="페이지 로딩 중..." />}>

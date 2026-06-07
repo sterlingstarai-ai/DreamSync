@@ -52,6 +52,22 @@ function createStorageMock() {
 
 const localStorageMock = createStorageMock();
 const sessionStorageMock = createStorageMock();
+const capacitorState = {
+  isNative: false,
+  platform: 'web',
+};
+const preferencesMock = {
+  get: vi.fn().mockResolvedValue({ value: null }),
+  set: vi.fn().mockResolvedValue(undefined),
+  remove: vi.fn().mockResolvedValue(undefined),
+  clear: vi.fn().mockResolvedValue(undefined),
+  keys: vi.fn().mockResolvedValue({ keys: [] }),
+};
+
+function setCapacitorPlatform(platform = 'web') {
+  capacitorState.platform = platform;
+  capacitorState.isNative = platform !== 'web';
+}
 
 Object.defineProperty(globalThis, 'localStorage', {
   configurable: true,
@@ -68,19 +84,13 @@ Object.defineProperty(globalThis, 'sessionStorage', {
 // Mock Capacitor
 vi.mock('@capacitor/core', () => ({
   Capacitor: {
-    isNativePlatform: () => false,
-    getPlatform: () => 'web',
+    isNativePlatform: () => capacitorState.isNative,
+    getPlatform: () => capacitorState.platform,
   },
 }));
 
 vi.mock('@capacitor/preferences', () => ({
-  Preferences: {
-    get: vi.fn().mockResolvedValue({ value: null }),
-    set: vi.fn().mockResolvedValue(undefined),
-    remove: vi.fn().mockResolvedValue(undefined),
-    clear: vi.fn().mockResolvedValue(undefined),
-    keys: vi.fn().mockResolvedValue({ keys: [] }),
-  },
+  Preferences: preferencesMock,
 }));
 
 vi.mock('@capacitor/haptics', () => ({
@@ -139,7 +149,27 @@ global.webkitSpeechRecognition = vi.fn().mockImplementation(() => ({
   onend: null,
 }));
 
+Object.defineProperty(globalThis, '__setCapacitorPlatform', {
+  configurable: true,
+  writable: true,
+  value: setCapacitorPlatform,
+});
+
+Object.defineProperty(globalThis, '__capacitorPreferencesMock', {
+  configurable: true,
+  writable: true,
+  value: preferencesMock,
+});
+
 beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
+  setCapacitorPlatform('web');
+  [preferencesMock.get, preferencesMock.set, preferencesMock.remove, preferencesMock.clear, preferencesMock.keys]
+    .forEach((mockFn) => mockFn.mockClear());
+  preferencesMock.get.mockResolvedValue({ value: null });
+  preferencesMock.set.mockResolvedValue(undefined);
+  preferencesMock.remove.mockResolvedValue(undefined);
+  preferencesMock.clear.mockResolvedValue(undefined);
+  preferencesMock.keys.mockResolvedValue({ keys: [] });
 });

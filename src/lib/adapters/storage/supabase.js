@@ -252,16 +252,55 @@ const ENTITY_DEFINITIONS = {
   },
 };
 
+const ENTITY_REQUIRED_FIELDS = {
+  dreams: {
+    row: ['id', 'user_id', 'dream_date', 'created_at', 'updated_at', 'source_device_id'],
+    record: ['id', 'userId', 'date', 'createdAt', 'updatedAt'],
+  },
+  daily_logs: {
+    row: ['id', 'user_id', 'log_date', 'created_at', 'updated_at', 'source_device_id'],
+    record: ['id', 'userId', 'date', 'createdAt', 'updatedAt'],
+  },
+  forecasts: {
+    row: ['id', 'user_id', 'forecast_date', 'prediction', 'created_at', 'updated_at', 'source_device_id'],
+    record: ['id', 'userId', 'date', 'prediction', 'createdAt', 'updatedAt'],
+  },
+  personal_symbols: {
+    row: ['id', 'user_id', 'name', 'count', 'created_at', 'updated_at', 'source_device_id'],
+    record: ['id', 'userId', 'name', 'count', 'createdAt', 'updatedAt'],
+  },
+  coach_plans: {
+    row: ['id', 'user_id', 'plan_date', 'tasks', 'created_at', 'updated_at', 'source_device_id'],
+    record: ['id', 'userId', 'date', 'tasks', 'createdAt', 'updatedAt'],
+  },
+};
+
 const TABLE_TO_ENTITY = Object.fromEntries(
   Object.entries(ENTITY_DEFINITIONS).map(([entity, definition]) => [definition.table, entity]),
 );
+
+function assertEntityContract(entity, variant, payload) {
+  const requiredFields = ENTITY_REQUIRED_FIELDS[entity]?.[variant] || [];
+  const missingFields = requiredFields.filter((field) => {
+    const value = payload?.[field];
+    return value === undefined || value === null || value === '';
+  });
+
+  if (missingFields.length > 0) {
+    throw new Error(
+      `[Supabase] ${entity} ${variant} contract mismatch: missing ${missingFields.join(', ')}`,
+    );
+  }
+
+  return payload;
+}
 
 export function serializeEntityRecord(entity, record) {
   const definition = ENTITY_DEFINITIONS[entity];
   if (!definition) {
     throw new Error(`Unknown entity: ${entity}`);
   }
-  return definition.toRow(record);
+  return assertEntityContract(entity, 'row', definition.toRow(record));
 }
 
 export function deserializeEntityRecord(entity, row) {
@@ -269,7 +308,7 @@ export function deserializeEntityRecord(entity, row) {
   if (!definition) {
     throw new Error(`Unknown entity: ${entity}`);
   }
-  return definition.fromRow(row);
+  return assertEntityContract(entity, 'record', definition.fromRow(row));
 }
 
 export function isConfigured() {

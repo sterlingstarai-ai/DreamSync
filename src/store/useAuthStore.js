@@ -9,6 +9,7 @@ import { zustandStorage } from '../lib/adapters/storage';
 import analytics from '../lib/adapters/analytics';
 import { getAPIAdapter } from '../lib/adapters/api';
 import { bootstrapRemoteAccount } from '../lib/sync/bootstrap';
+import { getPlatformLabel } from '../lib/platform';
 
 const MIN_PASSWORD_LENGTH = 6;
 const PASSWORD_HASH_VERSION = 1;
@@ -25,15 +26,6 @@ const defaultSettings = {
 
 function normalizeEmail(email = '') {
   return String(email || '').trim().toLowerCase();
-}
-
-function getPlatform() {
-  if (typeof window === 'undefined') return 'web';
-  const protocol = window.location?.protocol || '';
-  if (protocol === 'capacitor:') return 'ios';
-  const userAgent = typeof navigator !== 'undefined' ? (navigator.userAgent || '') : '';
-  if (/android/i.test(userAgent)) return 'android';
-  return 'web';
 }
 
 function getAuthMethod(email = '') {
@@ -174,14 +166,14 @@ const useAuthStore = create(
               name: user.name,
               email: user.email,
               createdAt: user.createdAt,
-              platform: getPlatform(),
+              platform: getPlatformLabel(),
               appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
             });
             analytics.setUserProperties({
               $name: user.name,
               $email: user.email,
               signup_date: user.createdAt,
-              platform: getPlatform(),
+              platform: getPlatformLabel(),
               onboarding_completed: user.onboardingCompleted,
             });
             analytics.track(analytics.events.AUTH_SIGNUP, {
@@ -218,14 +210,14 @@ const useAuthStore = create(
           name: user.name,
           email: user.email,
           createdAt: user.createdAt,
-          platform: getPlatform(),
+          platform: getPlatformLabel(),
           appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
         });
         analytics.setUserProperties({
           $name: user.name,
           $email: user.email,
           signup_date: user.createdAt,
-          platform: getPlatform(),
+          platform: getPlatformLabel(),
           onboarding_completed: false,
         });
         analytics.track(analytics.events.AUTH_SIGNUP, {
@@ -287,7 +279,7 @@ const useAuthStore = create(
               name: user.name,
               email: user.email,
               createdAt: user.createdAt,
-              platform: getPlatform(),
+              platform: getPlatformLabel(),
               appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
             });
             analytics.track(analytics.events.AUTH_LOGIN, {
@@ -323,7 +315,7 @@ const useAuthStore = create(
             name: upgraded.name,
             email: upgraded.email,
             createdAt: upgraded.createdAt,
-            platform: getPlatform(),
+            platform: getPlatformLabel(),
             appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
           });
           analytics.track(analytics.events.AUTH_LOGIN, {
@@ -348,7 +340,7 @@ const useAuthStore = create(
           name: currentUser.name,
           email: currentUser.email,
           createdAt: currentUser.createdAt,
-          platform: getPlatform(),
+          platform: getPlatformLabel(),
           appVersion: import.meta.env.VITE_APP_VERSION || '0.0.1',
         });
         analytics.track(analytics.events.AUTH_LOGIN, {

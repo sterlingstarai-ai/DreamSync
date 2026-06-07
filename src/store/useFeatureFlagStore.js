@@ -4,19 +4,26 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { DEFAULT_FEATURE_FLAGS, FEATURE_FLAG_INFO, isFlagAvailable } from '../constants/featureFlags';
-import { Capacitor } from '@capacitor/core';
 import { zustandStorage } from '../lib/adapters/storage';
 import { setAIAdapter } from '../lib/adapters';
+import RemoteFlagsAdapter from '../lib/adapters/flags/remote';
+import { getPlatformLabel } from '../lib/platform';
 import logger from '../lib/utils/logger';
 
-/**
- * 현재 플랫폼 가져오기
- */
 function getCurrentPlatform() {
-  if (Capacitor.isNativePlatform()) {
-    return Capacitor.getPlatform(); // 'ios' | 'android'
+  return getPlatformLabel();
+}
+
+function filterFlagsForPlatform(newFlags, platform) {
+  const validFlags = {};
+
+  for (const [key, value] of Object.entries(newFlags || {})) {
+    if (isFlagAvailable(key, platform)) {
+      validFlags[key] = Boolean(value);
+    }
   }
-  return 'web';
+
+  return validFlags;
 }
 
 const useFeatureFlagStore = create(
@@ -25,6 +32,8 @@ const useFeatureFlagStore = create(
       // 상태
       flags: { ...DEFAULT_FEATURE_FLAGS },
       platform: getCurrentPlatform(),
+      lastRemoteSyncAt: null,
+      lastRemoteError: null,
 
       // 액션
       /**
@@ -76,13 +85,7 @@ const useFeatureFlagStore = create(
        */
       setFlags: (newFlags) => {
         const { flags, platform } = get();
-        const validFlags = {};
-
-        for (const [key, value] of Object.entries(newFlags)) {
-          if (isFlagAvailable(key, platform)) {
-            validFlags[key] = value;
-          }
-        }
+        const validFlags = filterFlagsForPlatform(newFlags, platform);
 
         set({
           flags: {
@@ -128,6 +131,44 @@ const useFeatureFlagStore = create(
       },
 
       /**
+       * 원격 플래그 동기화
+       * @param {string | undefined} userId
+       * @returns {Promise<Object>}
+       */
+      refreshRemoteFlags: async (userId) => {
+        if (import.meta.env.VITE_FLAGS !== 'remote') {
+          return get().flags;
+        }
+
+        try {
+          const remoteFlags = await RemoteFlagsAdapter.getFlags(userId);
+          const platform = get().platform;
+          const nextFlags = {
+            ...DEFAULT_FEATURE_FLAGS,
+            ...filterFlagsForPlatform(remoteFlags, platform),
+          };
+
+          set({
+            flags: nextFlags,
+            lastRemoteSyncAt: Date.now(),
+            lastRemoteError: null,
+          });
+
+          setAIAdapter(nextFlags.edgeAI ? 'edge' : 'mock');
+          return nextFlags;
+        } catch (error) {
+          const message = error?.message || '원격 플래그를 불러오지 못했습니다.';
+          set({ lastRemoteError: message });
+          logger.error('[FeatureFlags] Remote sync failed:', error);
+          return get().flags;
+        }
+      },
+
+      clearRemoteFlagError: () => {
+        set({ lastRemoteError: null });
+      },
+
+      /**
        * 플래그 정보 가져오기
        * @param {string} key
        * @returns {Object|null}
@@ -151,7 +192,11 @@ const useFeatureFlagStore = create(
        * 플래그 초기화
        */
       resetFlags: () => {
-        set({ flags: { ...DEFAULT_FEATURE_FLAGS } });
+        set({
+          flags: { ...DEFAULT_FEATURE_FLAGS },
+          lastRemoteSyncAt: null,
+          lastRemoteError: null,
+        });
       },
     }),
     {

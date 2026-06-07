@@ -35,6 +35,7 @@ npm run dev
 - `npm run dev`: 개발 서버
 - `npm run build`: 프로덕션 빌드
 - `npm run test`: 테스트 실행
+- `npm run test:e2e:release`: 릴리즈용 E2E 세트 실행 (코어 여정 + UX 프리플라이트)
 - `npm run lint`: 린트
 - `npm run typecheck`: 타입체크
 - `npm run verify`: `lint + typecheck + build + test`
@@ -73,3 +74,13 @@ npm run dev
 - 로컬 우선 MVP 플로우는 동작하며 테스트가 구성되어 있습니다.
 - Supabase API/Edge 연동은 일부 스텁/준비 단계가 포함됩니다.
 - 문서/레거시 서비스 코드 정리가 진행 중이며, 최신 구조는 `src/hooks`, `src/store`, `src/lib/adapters`가 기준입니다.
+
+## 배포 전 검증 프로세스
+
+- 일반 변경 검증: `npm run verify`
+- 릴리즈 후보 검증: `bash scripts/release-gate.sh --repeat 20`
+- 릴리즈 게이트에는 코어 E2E 스모크와 UX 프리플라이트가 포함됩니다.
+  - SPA 라우트 전환 시 스크롤 리셋
+  - 검색 필터 UI 누락 여부
+  - 모달 z-index/backdrop blur 및 스크롤 잠금
+  - 하단 네비게이션과 마지막 CTA 간 겹침 여부

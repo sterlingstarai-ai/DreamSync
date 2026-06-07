@@ -19,6 +19,7 @@
 
 - 표준 검증 명령: `npm run verify`
 - 반복(flaky) 검증: `npm run test:repeat`
+- 릴리즈 E2E 세트: `npm run test:e2e:release`
 - 릴리즈 게이트: `bash scripts/release-gate.sh --repeat 20`
 - 시크릿 검사: `bash scripts/check-secrets.sh --all`
 - CI 워크플로우: `/Users/jmac/Desktop/DreamSync/.github/workflows/ci.yml`
@@ -72,6 +73,12 @@ bash scripts/release-gate.sh --repeat 20
 - `dist/` 시크릿 노출 패턴
 - PII 잠재 누출 패턴
 - feature flag 기본값 안전성
+- 코어 사용자 여정 E2E 스모크
+- UX 프리플라이트
+  - SPA 스크롤 리셋
+  - 검색 필터 누락
+  - 모달 레이어/블러/스크롤 잠금
+  - 하단 네비와 CTA 겹침
 - 테스트 반복 실행으로 flaky 검출
 
 ## 6. 실제 구동 절차 (Web/iOS/Android)

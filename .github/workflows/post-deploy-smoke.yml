@@ -1,4 +1,4 @@
-name: Post Deploy Smoke
+name: Post Deploy Verification
 
 on:
   deployment_status:
@@ -35,4 +35,4 @@ jobs:
 
       - run: npm ci
       - run: npx playwright install --with-deps
-      - run: npm run test:e2e:smoke
+      - run: npm run test:e2e:release

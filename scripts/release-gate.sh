@@ -56,7 +56,7 @@ fi
 
 # ── Gate 2: 번들 시크릿 스캔 ──
 echo "▶ Gate 2: 번들 시크릿 스캔"
-SECRET_HITS=$(grep -rE 'sk-ant|ANTHROPIC_API_KEY|password\s*=' dist/ 2>/dev/null | wc -l | tr -d ' ')
+SECRET_HITS=$({ grep -rE 'sk-ant|ANTHROPIC_API_KEY|password\s*=' dist/ 2>/dev/null || true; } | wc -l | tr -d ' ')
 if [[ "$SECRET_HITS" -eq 0 ]]; then
   report "PASS" "번들 시크릿 스캔" "(0 hits)"
 else
@@ -68,15 +68,15 @@ echo "▶ Gate 3: PII 스캔"
 # 로그/분석에 dream 원문이 직접 전달되는 패턴 탐지
 # 허용: maskDreamContent, maskSensitiveFields, [chars], [items]
 PII_PATTERNS='(console\.(log|warn|error|info)\s*\(\s*[^)]*\b(dreamContent|dream\.content|\.content\b)[^)]*\))'
-PII_HITS=$(grep -rE "$PII_PATTERNS" src/ --include='*.js' --include='*.jsx' \
+PII_HITS=$({ { grep -rE "$PII_PATTERNS" src/ --include='*.js' --include='*.jsx' || true; } \
   | grep -v 'mask' | grep -v 'test' | grep -v '__tests__' | grep -v '.test.' \
-  | grep -v 'schemas' | grep -v '// ' | wc -l | tr -d ' ')
+  | grep -v 'schemas' | grep -v '// ' || true; } | wc -l | tr -d ' ')
 
 # 분석 이벤트에 raw health data 전달 패턴
-HEALTH_PII=$(grep -rE '(track|log|send|emit)\s*\([^)]*\b(hrvMs|remMinutes|deepMinutes|sleepData|healthData)\b' src/ \
-  --include='*.js' --include='*.jsx' \
+HEALTH_PII=$({ { grep -rE '(track|log|send|emit)\s*\([^)]*\b(hrvMs|remMinutes|deepMinutes|sleepData|healthData)\b' src/ \
+  --include='*.js' --include='*.jsx' || true; } \
   | grep -v 'test' | grep -v '__tests__' | grep -v '.test.' \
-  | grep -v 'mock' | grep -v '// ' | wc -l | tr -d ' ')
+  | grep -v 'mock' | grep -v '// ' || true; } | wc -l | tr -d ' ')
 
 TOTAL_PII=$((PII_HITS + HEALTH_PII))
 if [[ "$TOTAL_PII" -eq 0 ]]; then
@@ -87,15 +87,23 @@ fi
 
 # ── Gate 4: Feature flag 기본값 검증 ──
 echo "▶ Gate 4: Feature flag 기본값"
-FLAG_TRUE=$(grep -E '^\s*(healthkit|saju|uhs|b2b|edgeAI|devMode)\s*:\s*true' src/constants/featureFlags.js | wc -l | tr -d ' ')
+FLAG_TRUE=$({ grep -E '^\s*(healthkit|saju|uhs|b2b|edgeAI|devMode)\s*:\s*true' src/constants/featureFlags.js || true; } | wc -l | tr -d ' ')
 if [[ "$FLAG_TRUE" -eq 0 ]]; then
   report "PASS" "Feature flag 기본값" "(all false)"
 else
   report "FAIL" "Feature flag 기본값" "($FLAG_TRUE flags default=true)"
 fi
 
-# ── Gate 5: 반복 실행 (flaky 검출) ──
-echo "▶ Gate 5: 반복 실행 (${REPEAT}회)"
+# ── Gate 5: E2E 릴리즈 프리플라이트 (핵심 여정 + UX) ──
+echo "▶ Gate 5: E2E 릴리즈 프리플라이트"
+if npm run test:e2e:release > /dev/null 2>&1; then
+  report "PASS" "E2E 릴리즈 프리플라이트" "(smoke + scroll/filter/layer)"
+else
+  report "FAIL" "E2E 릴리즈 프리플라이트"
+fi
+
+# ── Gate 6: 반복 실행 (flaky 검출) ──
+echo "▶ Gate 6: 반복 실행 (${REPEAT}회)"
 FLAKE_COUNT=0
 for i in $(seq 1 $REPEAT); do
   if ! npx vitest run --retry 0 > /dev/null 2>&1; then

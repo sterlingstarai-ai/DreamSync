@@ -14,18 +14,45 @@ import useAuthStore from './store/useAuthStore';
 import useSyncStatusStore from './store/useSyncStatusStore';
 import logger from './lib/utils/logger';
 import SentryAdapter from './lib/adapters/analytics/sentry';
+import { getPlatformLabel } from './lib/platform';
+import {
+  getRuntimeConfig,
+  validateRuntimeConfig,
+  createRuntimeConfigError,
+} from './lib/runtimeConfig';
 
-function getPlatformLabel() {
-  if (typeof window === 'undefined') return 'web';
-  const protocol = window.location?.protocol || '';
-  if (protocol === 'capacitor:') return 'ios';
-  const userAgent = typeof navigator !== 'undefined' ? (navigator.userAgent || '') : '';
-  if (/android/i.test(userAgent)) return 'android';
-  return 'web';
+function AppInitError({ error }) {
+  const issues = Array.isArray(error?.issues) && error.issues.length > 0
+    ? error.issues
+    : [error?.message || '알 수 없는 초기화 오류가 발생했습니다.'];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--bg-primary)] px-6">
+      <div className="w-full max-w-lg rounded-3xl border border-red-200 bg-white p-6 shadow-xl">
+        <p className="text-sm font-semibold uppercase tracking-[0.2em] text-red-600">
+          Startup Guard
+        </p>
+        <h1 className="mt-3 text-2xl font-semibold text-slate-900">
+          앱 설정을 확인해야 합니다
+        </h1>
+        <p className="mt-3 text-sm leading-6 text-slate-600">
+          잘못된 런타임 조합으로 앱이 반쯤 동작하는 상태를 막기 위해 초기화를 중단했습니다.
+        </p>
+        <ul className="mt-5 space-y-2 text-sm text-slate-700">
+          {issues.map((issue) => (
+            <li key={issue} className="rounded-2xl bg-red-50 px-4 py-3">
+              {issue}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
 }
 
 function App() {
   const [isInitialized, setIsInitialized] = useState(false);
+  const [initError, setInitError] = useState(null);
 
   useEffect(() => {
     let unsubscribeFlags;
@@ -38,13 +65,18 @@ function App() {
         // Capacitor 초기화
         disposeCapacitor = await initCapacitor();
 
-        // Adapter 초기화 (환경 변수 기반)
-        const config = {
-          ai: import.meta.env.VITE_AI || 'mock',
-          analytics: import.meta.env.VITE_ANALYTICS || 'mock',
-          api: import.meta.env.VITE_BACKEND || 'local',
-        };
-        initializeAdapters(config);
+        const runtimeConfig = getRuntimeConfig();
+        const validation = validateRuntimeConfig(runtimeConfig);
+        if (!validation.valid) {
+          throw createRuntimeConfigError(validation.issues);
+        }
+
+        initializeAdapters({
+          ai: runtimeConfig.ai,
+          analytics: runtimeConfig.analytics,
+          api: runtimeConfig.api,
+        });
+
         if (typeof sessionStorage !== 'undefined' && !sessionStorage.getItem('dreamsync_app_open_tracked')) {
           analytics.track(analytics.events.APP_OPEN, {
             platform: getPlatformLabel(),
@@ -56,6 +88,11 @@ function App() {
         // Feature Flag edgeAI 값 동기화 (hydration 이후 변경도 반영)
         const applyEdgeAIFlag = (enabled) => {
           setAIAdapter(enabled ? 'edge' : (import.meta.env.VITE_AI || 'mock'));
+        };
+
+        const syncRemoteFlags = async (user) => {
+          if (runtimeConfig.flags !== 'remote') return;
+          await useFeatureFlagStore.getState().refreshRemoteFlags(user?.id);
         };
 
         applyEdgeAIFlag(useFeatureFlagStore.getState().getFlag('edgeAI'));
@@ -73,9 +110,13 @@ function App() {
           }
         };
         applySentryUser(useAuthStore.getState().user);
+        await syncRemoteFlags(useAuthStore.getState().user);
         unsubscribeAuth = useAuthStore.subscribe((state, prevState) => {
           if (state.user?.id !== prevState.user?.id) {
             applySentryUser(state.user);
+            syncRemoteFlags(state.user).catch((error) => {
+              logger.error('Remote flag sync error:', error);
+            });
           }
         });
 
@@ -94,6 +135,7 @@ function App() {
         await initSyncQueue();
 
       } catch (error) {
+        setInitError(error);
         logger.error('App init error:', error);
       } finally {
         setIsInitialized(true);
@@ -120,6 +162,10 @@ function App() {
 
   if (!isInitialized) {
     return <PageLoading message="DreamSync 로딩 중..." />;
+  }
+
+  if (initError) {
+    return <AppInitError error={initError} />;
   }
 
   return (
