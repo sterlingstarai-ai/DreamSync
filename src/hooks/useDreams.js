@@ -44,7 +44,10 @@ export default function useDreams() {
    */
   const userDreams = useMemo(() => {
     if (!userId) return [];
-    return dreams.filter(d => d.userId === userId);
+    // Exclude soft-deleted tombstones (pulled into the store via multi-device sync)
+    // to match every other selector; otherwise deleted dreams reappear in the list
+    // and inflate stats.totalDreams.
+    return dreams.filter(d => d.userId === userId && !d.deletedAt);
   }, [dreams, userId]);
 
   /**

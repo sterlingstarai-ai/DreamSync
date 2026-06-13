@@ -61,13 +61,15 @@ export default function Settings() {
   };
 
   const handleExportData = () => {
+    // Exclude soft-deleted tombstones so an export never resurfaces deleted content.
+    const notDeleted = (record) => !record?.deletedAt;
     const data = {
       exportedAt: new Date().toISOString(),
       version: '1.0',
-      dreams: useDreamStore.getState().dreams,
-      checkIns: useCheckInStore.getState().logs,
-      symbols: useSymbolStore.getState().symbols,
-      forecasts: useForecastStore.getState().forecasts,
+      dreams: useDreamStore.getState().dreams.filter(notDeleted),
+      checkIns: useCheckInStore.getState().logs.filter(notDeleted),
+      symbols: useSymbolStore.getState().symbols.filter(notDeleted),
+      forecasts: useForecastStore.getState().forecasts.filter(notDeleted),
       settings: getAllSettings(),
     };
 
