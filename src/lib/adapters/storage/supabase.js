@@ -232,21 +232,25 @@ const ENTITY_DEFINITIONS = {
   },
   daily_logs: {
     table: 'daily_logs',
+    onConflict: 'user_id,log_date',
     toRow: mapDailyLogToRow,
     fromRow: mapRowToDailyLog,
   },
   forecasts: {
     table: 'forecasts',
+    onConflict: 'user_id,forecast_date',
     toRow: mapForecastToRow,
     fromRow: mapRowToForecast,
   },
   personal_symbols: {
     table: 'personal_symbols',
+    onConflict: 'user_id,name',
     toRow: mapSymbolToRow,
     fromRow: mapRowToSymbol,
   },
   coach_plans: {
     table: 'coach_plans',
+    onConflict: 'user_id,plan_date',
     toRow: mapCoachPlanToRow,
     fromRow: mapRowToCoachPlan,
   },
@@ -311,6 +315,14 @@ export function deserializeEntityRecord(entity, row) {
   return assertEntityContract(entity, 'record', definition.fromRow(row));
 }
 
+export function getEntityUpsertOptions(entity) {
+  const definition = ENTITY_DEFINITIONS[entity];
+  if (!definition) {
+    throw new Error(`Unknown entity: ${entity}`);
+  }
+  return definition.onConflict ? { onConflict: definition.onConflict } : undefined;
+}
+
 export function isConfigured() {
   return Boolean(
     import.meta.env.VITE_SUPABASE_URL &&
@@ -336,12 +348,9 @@ function applyDeletedFilter(query, includeDeleted = false) {
   return includeDeleted ? query : query.is('deleted_at', null);
 }
 
-function resolveEntityFromTable(table) {
-  const entity = TABLE_TO_ENTITY[table];
-  if (!entity) {
-    throw new Error(`Unknown Supabase table: ${table}`);
-  }
-  return entity;
+function upsertEntityRow(client, entity, row) {
+  const definition = ENTITY_DEFINITIONS[entity];
+  return client.from(definition.table).upsert(row, getEntityUpsertOptions(entity));
 }
 
 async function signUp(email, password) {
@@ -375,8 +384,8 @@ async function saveDream(dream) {
   const client = getClient();
   const row = serializeEntityRecord('dreams', dream);
   const { data, error } = await client
-    .from('dreams')
-    .upsert(row)
+    .from(ENTITY_DEFINITIONS.dreams.table)
+    .upsert(row, getEntityUpsertOptions('dreams'))
     .select('*')
     .single();
   if (error) throw error;
@@ -435,8 +444,8 @@ async function saveDailyLog(log) {
   const client = getClient();
   const row = serializeEntityRecord('daily_logs', log);
   const { data, error } = await client
-    .from('daily_logs')
-    .upsert(row)
+    .from(ENTITY_DEFINITIONS.daily_logs.table)
+    .upsert(row, getEntityUpsertOptions('daily_logs'))
     .select('*')
     .single();
   if (error) throw error;
@@ -469,8 +478,8 @@ async function saveForecast(forecast) {
   const client = getClient();
   const row = serializeEntityRecord('forecasts', forecast);
   const { data, error } = await client
-    .from('forecasts')
-    .upsert(row)
+    .from(ENTITY_DEFINITIONS.forecasts.table)
+    .upsert(row, getEntityUpsertOptions('forecasts'))
     .select('*')
     .single();
   if (error) throw error;
@@ -503,8 +512,8 @@ async function saveSymbol(symbol) {
   const client = getClient();
   const row = serializeEntityRecord('personal_symbols', symbol);
   const { data, error } = await client
-    .from('personal_symbols')
-    .upsert(row)
+    .from(ENTITY_DEFINITIONS.personal_symbols.table)
+    .upsert(row, getEntityUpsertOptions('personal_symbols'))
     .select('*')
     .single();
   if (error) throw error;
@@ -543,14 +552,29 @@ async function getCoachPlans(userId, options = {}) {
   return (data || []).map((row) => deserializeEntityRecord('coach_plans', row));
 }
 
+/**
+ * Sync a batch of queued changes, reporting per-item outcomes so the caller can
+ * remove only successfully-synced items and quarantine repeatedly-failing ones.
+ * A single failing row no longer aborts the whole batch.
+ *
+ * @param {Array} changes
+ * @returns {Promise<{ succeeded: Array<string>, failed: Array<{ id: string, error: any }> }>}
+ */
 async function syncPendingChanges(changes) {
   const client = getClient();
+  const succeeded = [];
+  const failed = [];
 
   for (const change of changes) {
+    const itemId = change.id ?? change.recordId;
     try {
-      const entity = change.entity || resolveEntityFromTable(change.table);
-      const definition = ENTITY_DEFINITIONS[entity];
-      if (!definition) continue;
+      const entity = change.entity || (change.table ? TABLE_TO_ENTITY[change.table] : null);
+      const definition = entity ? ENTITY_DEFINITIONS[entity] : null;
+      if (!definition) {
+        // Unknown/unprocessable item — drop it from the queue rather than retry forever.
+        succeeded.push(itemId);
+        continue;
+      }
 
       const payload = {
         ...(change.payload || change.data || {}),
@@ -564,13 +588,16 @@ async function syncPendingChanges(changes) {
       }
 
       const row = definition.toRow(payload);
-      const { error } = await client.from(definition.table).upsert(row);
+      const { error } = await upsertEntityRow(client, entity, row);
       if (error) throw error;
+      succeeded.push(itemId);
     } catch (error) {
       logger.error(`[Supabase] Sync failed for ${change.entity || change.table}:`, error);
-      throw error;
+      failed.push({ id: itemId, error });
     }
   }
+
+  return { succeeded, failed };
 }
 
 async function pullBootstrapData(userId) {

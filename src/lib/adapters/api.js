@@ -11,7 +11,7 @@ const LocalAPIAdapter = {
     return true;
   },
   async processSyncBatch(batch = []) {
-    return { processed: batch.length };
+    return { succeeded: batch.map((item) => item.id), failed: [], processed: batch.length };
   },
   async pullBootstrapData(_userId) {
     return {
@@ -42,14 +42,9 @@ const SupabaseAPIAdapter = {
     return await SupabaseStorageAdapter.getSession();
   },
   async processSyncBatch(batch = []) {
-    const changes = batch.filter((item) => item?.entity && item?.recordId);
-
-    if (changes.length === 0) {
-      return { processed: 0 };
-    }
-
-    await SupabaseStorageAdapter.syncPendingChanges(changes);
-    return { processed: changes.length };
+    // Pass the full batch through; syncPendingChanges reports per-item success so
+    // the queue can drop only what actually synced and isolate poison rows.
+    return await SupabaseStorageAdapter.syncPendingChanges(batch);
   },
   async pullBootstrapData(userId) {
     return await SupabaseStorageAdapter.pullBootstrapData(userId);

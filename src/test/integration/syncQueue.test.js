@@ -86,10 +86,9 @@ describe('SyncQueue 통합 테스트', () => {
     await clearQueue();
 
     expect(getPendingCount()).toBe(0);
-    // storage.set이 빈 배열로 호출됨
-    const setCalls = storage.set.mock.calls;
-    const lastSet = setCalls[setCalls.length - 1];
-    expect(lastSet[0]).toBe('sync_queue');
-    expect(lastSet[1]).toEqual([]);
+    // 큐(및 dead-letter)가 빈 배열로 persist됨
+    const setForKey = (key) => storage.set.mock.calls.filter((call) => call[0] === key);
+    expect(setForKey('sync_queue').at(-1)?.[1]).toEqual([]);
+    expect(setForKey('sync_queue_dead').at(-1)?.[1]).toEqual([]);
   });
 });

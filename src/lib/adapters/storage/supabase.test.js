@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { deserializeEntityRecord, serializeEntityRecord } from './supabase';
+import {
+  deserializeEntityRecord,
+  getEntityUpsertOptions,
+  serializeEntityRecord,
+} from './supabase';
 
 describe('SupabaseStorageAdapter mapping', () => {
   it('serializes dream records to snake_case rows', () => {
@@ -85,5 +89,13 @@ describe('SupabaseStorageAdapter mapping', () => {
       updated_at: '2026-03-07T21:00:00.000Z',
       source_device_id: 'device-a',
     })).toThrow('[Supabase] daily_logs record contract mismatch');
+  });
+
+  it('uses unique sync keys for idempotent multi-device upserts', () => {
+    expect(getEntityUpsertOptions('dreams')).toBeUndefined();
+    expect(getEntityUpsertOptions('daily_logs')).toEqual({ onConflict: 'user_id,log_date' });
+    expect(getEntityUpsertOptions('forecasts')).toEqual({ onConflict: 'user_id,forecast_date' });
+    expect(getEntityUpsertOptions('personal_symbols')).toEqual({ onConflict: 'user_id,name' });
+    expect(getEntityUpsertOptions('coach_plans')).toEqual({ onConflict: 'user_id,plan_date' });
   });
 });

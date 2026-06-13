@@ -10,6 +10,7 @@ import logger from '../utils/logger';
 import SentryAdapter from '../adapters/analytics/sentry';
 
 const QUEUE_KEY = 'sync_queue';
+const DEAD_LETTER_KEY = 'sync_queue_dead';
 const MAX_RETRIES = 3;
 
 const EMPTY_STATUS = {
@@ -20,9 +21,10 @@ const EMPTY_STATUS = {
   lastError: null,
 };
 
-/** @type {{ items: Array, listeners: Set<Function>, networkListener: any, initialized: boolean, status: typeof EMPTY_STATUS }} */
+/** @type {{ items: Array, deadItems: Array, listeners: Set<Function>, networkListener: any, initialized: boolean, status: typeof EMPTY_STATUS }} */
 const state = {
   items: [],
+  deadItems: [],
   listeners: new Set(),
   networkListener: null,
   initialized: false,
@@ -49,6 +51,18 @@ function updateStatus(partial) {
 
 async function persist() {
   await storage.set(QUEUE_KEY, state.items);
+}
+
+async function persistDead() {
+  await storage.set(DEAD_LETTER_KEY, state.deadItems);
+}
+
+function toDeadLetter(item, errorMessage) {
+  return {
+    ...item,
+    lastError: errorMessage || '동기화에 실패했습니다.',
+    deadLetteredAt: new Date().toISOString(),
+  };
 }
 
 function parseLegacyType(type = '') {
@@ -141,6 +155,11 @@ export async function initSyncQueue() {
     state.items = saved.map(normalizeQueueItem);
   }
 
+  const savedDead = await storage.get(DEAD_LETTER_KEY);
+  if (Array.isArray(savedDead)) {
+    state.deadItems = savedDead;
+  }
+
   const status = await Network.getStatus();
   state.status = {
     ...state.status,
@@ -202,33 +221,56 @@ export async function flush() {
     lastError: null,
   });
 
+  // Snapshot the items we are about to send. Anything enqueued AFTER this point
+  // (queueUpsert fires enqueue() un-awaited) is NOT part of this batch and must
+  // survive the flush — never clear the whole queue.
+  const batch = getCurrentBatch();
+  const batchIds = new Set(batch.map((item) => item.id));
+  let madeProgress = false;
+
   try {
-    const batch = getCurrentBatch();
-    await processBatch(batch);
-    state.items = [];
+    const result = await processBatch(batch);
+
+    // Per-item contract: { succeeded: [itemId], failed: [{ id, error }] }.
+    // Legacy adapters return { processed } with no per-item detail → treat the
+    // whole batch as succeeded.
+    const succeeded = Array.isArray(result?.succeeded)
+      ? new Set(result.succeeded)
+      : new Set(batchIds);
+    const failedById = new Map(
+      (Array.isArray(result?.failed) ? result.failed : []).map((entry) => [entry.id, entry]),
+    );
+
+    const { remaining, newlyDead } = partitionAfterFlush(succeeded, failedById);
+    madeProgress = succeeded.size > 0;
+
+    state.items = remaining;
     await persist();
+    await commitDeadLetter(newlyDead);
+
+    const hadFailures = failedById.size > 0 || newlyDead.length > 0;
     updateStatus({
-      status: state.status.isOnline ? 'idle' : 'offline',
-      lastSyncedAt: new Date().toISOString(),
-      lastError: null,
+      status: hadFailures
+        ? (state.status.isOnline ? 'error' : 'offline')
+        : (state.status.isOnline ? 'idle' : 'offline'),
+      lastSyncedAt: succeeded.size > 0 ? new Date().toISOString() : state.status.lastSyncedAt,
+      lastError: hadFailures ? '일부 항목 동기화에 실패했습니다.' : null,
     });
   } catch (error) {
+    // Total failure (e.g. client/config error): the whole batch failed atomically.
     logger.error('[SyncQueue] flush failed:', error);
     SentryAdapter.setTag('sync_status', 'error');
     SentryAdapter.captureException(error, {
       queue_size: state.items.length,
-      queue_entities: state.items.map(item => item.entity).join(','),
+      queue_entities: state.items.map((item) => item.entity).join(','),
     });
 
-    const failed = [];
-    for (const item of state.items) {
-      const nextRetries = (item.retries || 0) + 1;
-      if (nextRetries < MAX_RETRIES) {
-        failed.push({ ...item, retries: nextRetries });
-      }
-    }
-    state.items = failed;
+    const failedById = new Map(batch.map((item) => [item.id, { id: item.id, error }]));
+    const { remaining, newlyDead } = partitionAfterFlush(new Set(), failedById);
+    state.items = remaining;
     await persist();
+    await commitDeadLetter(newlyDead);
+
     updateStatus({
       status: state.status.isOnline ? 'error' : 'offline',
       lastError: error?.message || '동기화에 실패했습니다.',
@@ -236,6 +278,50 @@ export async function flush() {
   } finally {
     isFlushing = false;
   }
+
+  // Drain items that arrived mid-flight, but only if this flush made progress
+  // (prevents a hot loop when nothing can currently be synced).
+  if (madeProgress && state.status.isOnline && state.items.length > 0) {
+    await flush();
+  }
+}
+
+/**
+ * Reconcile state.items after a flush attempt.
+ * - succeeded items are removed from the queue
+ * - failed items get their retry counter bumped; at MAX_RETRIES they move to the
+ *   dead-letter store instead of being silently dropped
+ * - items that were not part of the processed batch (enqueued mid-flight) are kept untouched
+ */
+function partitionAfterFlush(succeeded, failedById) {
+  const remaining = [];
+  const newlyDead = [];
+
+  for (const item of state.items) {
+    if (succeeded.has(item.id)) {
+      continue;
+    }
+    if (failedById.has(item.id)) {
+      const nextRetries = (item.retries || 0) + 1;
+      if (nextRetries >= MAX_RETRIES) {
+        newlyDead.push(toDeadLetter({ ...item, retries: nextRetries }, failedById.get(item.id)?.error?.message));
+      } else {
+        remaining.push({ ...item, retries: nextRetries });
+      }
+      continue;
+    }
+    // Item enqueued mid-flight (not part of the processed batch) or under-reported
+    // by the adapter → keep it queued without penalty so it is never lost.
+    remaining.push(item);
+  }
+
+  return { remaining, newlyDead };
+}
+
+async function commitDeadLetter(newlyDead) {
+  if (newlyDead.length === 0) return;
+  state.deadItems = [...state.deadItems, ...newlyDead];
+  await persistDead();
 }
 
 export function getSyncStatusSnapshot() {
@@ -253,6 +339,10 @@ export function getPendingCount() {
   return state.items.length;
 }
 
+export function getDeadLetterCount() {
+  return state.deadItems.length;
+}
+
 export function subscribe(listener) {
   state.listeners.add(listener);
   listener(getSyncStatusSnapshot());
@@ -261,7 +351,9 @@ export function subscribe(listener) {
 
 export async function clearQueue() {
   state.items = [];
+  state.deadItems = [];
   await persist();
+  await persistDead();
   updateStatus({
     status: state.status.isOnline ? 'idle' : 'offline',
     lastError: null,
