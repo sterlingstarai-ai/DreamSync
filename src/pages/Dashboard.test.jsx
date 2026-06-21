@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Dashboard from './Dashboard';
+import { selectPrimaryInsight } from '../lib/services/dashboardInsight';
 
 const mockState = vi.hoisted(() => ({
   user: { id: 'test-user', name: '테스트', onboardingCompleted: true },
@@ -172,11 +173,14 @@ describe('Dashboard', () => {
     expect(screen.getByText('저녁 체크인')).toBeInTheDocument();
   });
 
-  it('should render stats section', () => {
+  it('consolidates weekly stats into report (no inline 이번 주 현황 card)', () => {
     renderDashboard();
-    expect(screen.getByText('이번 주 현황')).toBeInTheDocument();
-    expect(screen.getAllByText(/꿈 기록/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/체크인/).length).toBeGreaterThan(0);
+    // '이번 주 현황' 인라인 통계 카드는 /report로 통합되어 대시보드에서 제거됨
+    expect(screen.queryByText('이번 주 현황')).not.toBeInTheDocument();
+    // 활성 사용자(코치플랜·검증·복구 없음)는 인사이트 슬롯이 비어 카드 수가 줄고, 다음 단계 가이드는 초보 전용
+    expect(screen.queryByText('다음 단계 가이드')).not.toBeInTheDocument();
+    // 퀵 액션은 중복 없이 단일 노출
+    expect(screen.getByText('꿈 기록하기')).toBeInTheDocument();
   });
 
   it('should render forecast card placeholder when no forecast and no data', () => {
@@ -312,5 +316,29 @@ describe('Dashboard', () => {
     const payload = mockState.upsertTodayCoachPlan.mock.calls[0][0];
     const checkInTasks = payload.tasks.filter(task => task.title === '오늘 저녁 체크인 완료하기');
     expect(checkInTasks).toHaveLength(1);
+  });
+});
+
+describe('selectPrimaryInsight (인사이트 단일 우선순위 슬롯)', () => {
+  it('어제 예보 검증을 최우선으로 선택한다', () => {
+    expect(selectPrimaryInsight({
+      canShowReview: true,
+      canShowGoalRecovery: true,
+      canShowCoachPlan: true,
+    })).toBe('review');
+  });
+
+  it('검증이 없으면 목표 복구 → 코치 플랜 순으로 폴백한다', () => {
+    expect(selectPrimaryInsight({
+      canShowGoalRecovery: true,
+      canShowCoachPlan: true,
+    })).toBe('goalRecovery');
+    expect(selectPrimaryInsight({ canShowCoachPlan: true })).toBe('coachPlan');
+  });
+
+  it('초보는 다음 단계 가이드, 그 외 빈 슬롯은 none으로 비운다', () => {
+    expect(selectPrimaryInsight({ isBeginner: true })).toBe('nextStep');
+    expect(selectPrimaryInsight({})).toBe('none');
+    expect(selectPrimaryInsight()).toBe('none');
   });
 });

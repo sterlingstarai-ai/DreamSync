@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Moon, Sun, Sparkles, TrendingUp, Calendar,
+  Moon, Sun, Sparkles,
   ChevronRight, CheckCircle2, AlertTriangle, Search, Target
 } from 'lucide-react';
 import {
@@ -27,6 +27,7 @@ import { getConditionLabel, getConditionColor } from '../lib/ai/generateForecast
 import { detectPatternAlerts } from '../lib/services/patternAlertService';
 import { buildCoachPlan, getCoachPlanCompletion } from '../lib/services/coachPlanService';
 import { buildGoalRecoveryPlan } from '../lib/services/goalRecoveryService';
+import { selectPrimaryInsight } from '../lib/services/dashboardInsight';
 import analytics from '../lib/adapters/analytics';
 
 export default function Dashboard() {
@@ -174,6 +175,12 @@ export default function Dashboard() {
     return getCoachPlanCompletion(todayCoachPlan?.tasks || []);
   }, [todayCoachPlan]);
 
+  // 오늘의 인사이트 단일 우선순위 슬롯 (누적되던 카드들을 가장 시급한 1건으로 통합)
+  const canShowReview = isAdvanced && canReviewYesterdayForecast && !!yesterdayForecast && !!yesterdayLog;
+  const canShowGoalRecovery = isAdvanced && recoveryPlan.isNeeded;
+  const canShowCoachPlan = !isBeginner && (todayCoachPlan?.tasks?.length > 0);
+  const primaryInsight = selectPrimaryInsight({ canShowReview, canShowGoalRecovery, canShowCoachPlan, isBeginner });
+
   const handleApplyRecoveryPlan = useCallback(() => {
     if (!user?.id || !recoveryPlan.isNeeded || recoveryPlan.tasks.length === 0) return;
 
@@ -287,36 +294,7 @@ export default function Dashboard() {
           />
         </section>
 
-        {!isBeginner && todayCoachPlan?.tasks?.length > 0 && (
-          <section className="mb-6">
-            <CoachPlanCard
-              plan={todayCoachPlan}
-              progress={coachProgress}
-              onToggleTask={handleToggleCoachTask}
-            />
-          </section>
-        )}
-
-        {isAdvanced && recoveryPlan.isNeeded && (
-          <section className="mb-6">
-            <GoalRecoveryCard
-              plan={recoveryPlan}
-              onApply={handleApplyRecoveryPlan}
-            />
-          </section>
-        )}
-
-        {isAdvanced && canReviewYesterdayForecast && yesterdayForecast && yesterdayLog && (
-          <section className="mb-6">
-            <ForecastReviewCard
-              forecast={yesterdayForecast}
-              log={yesterdayLog}
-              onReview={reviewYesterdayForecast}
-            />
-          </section>
-        )}
-
-        {/* Quick Actions */}
+        {/* Card 2: 퀵 액션 (단일 행) */}
         <section className="grid grid-cols-2 gap-3 mb-6">
           <QuickActionCard
             icon={Moon}
@@ -334,9 +312,30 @@ export default function Dashboard() {
           />
         </section>
 
-        {isBeginner ? (
-          <>
-            <section className="mb-6">
+        {/* Card 3: 오늘의 인사이트 — 누적되던 카드를 단일 우선순위 슬롯으로 통합 */}
+        {primaryInsight !== 'none' && (
+          <section className="mb-6" aria-label="오늘의 인사이트">
+            {primaryInsight === 'review' && (
+              <ForecastReviewCard
+                forecast={yesterdayForecast}
+                log={yesterdayLog}
+                onReview={reviewYesterdayForecast}
+              />
+            )}
+            {primaryInsight === 'goalRecovery' && (
+              <GoalRecoveryCard
+                plan={recoveryPlan}
+                onApply={handleApplyRecoveryPlan}
+              />
+            )}
+            {primaryInsight === 'coachPlan' && (
+              <CoachPlanCard
+                plan={todayCoachPlan}
+                progress={coachProgress}
+                onToggleTask={handleToggleCoachTask}
+              />
+            )}
+            {primaryInsight === 'nextStep' && (
               <NextStepGuideCard
                 checkedInToday={checkedInToday}
                 hasDreamToday={todayDreams.length > 0}
@@ -344,97 +343,61 @@ export default function Dashboard() {
                 onMoveCheckIn={() => navigate('/checkin')}
                 onMoveReport={() => navigate('/report')}
               />
-            </section>
-            <section className="mb-6">
-              <MiniActivitySummary
-                dreamCount={dreamCount}
-                streak={streak}
-                checkedInToday={checkedInToday}
-              />
-            </section>
-          </>
+            )}
+          </section>
+        )}
+
+        {/* Card 4: 초보 → 활동 요약 / 그 외 → 최근 꿈 + UHS */}
+        {isBeginner ? (
+          <section className="mb-6">
+            <MiniActivitySummary
+              dreamCount={dreamCount}
+              streak={streak}
+              checkedInToday={checkedInToday}
+            />
+          </section>
         ) : (
           <>
-            {/* Stats Overview */}
-            <section className="mb-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                  이번 주 현황
-                </h2>
-                <button
-                  onClick={() => navigate('/report')}
-                  aria-label="주간 리포트 자세히 보기"
-                  className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  자세히 보기
-                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <StatCard
-                  label="꿈 기록"
-                  value={recentDreams.length}
-                  unit="개"
-                  icon={Moon}
-                />
-                <StatCard
-                  label="체크인"
-                  value={checkInStats.completionRate}
-                  unit="%"
-                  icon={Calendar}
-                />
-                <StatCard
-                  label="연속"
-                  value={checkInStats.streak}
-                  unit="일"
-                  icon={TrendingUp}
-                />
-              </div>
-            </section>
-
-            {/* UHS Card (Phase 4 - Feature Flag) */}
-            {isAdvanced && isUHSEnabled && (
+            {recentDreams.length > 0 && (
               <section className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-lg font-semibold text-[var(--text-primary)]">
+                    최근 꿈
+                  </h2>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => navigate('/search')}
+                      aria-label="통합 검색 보기"
+                      className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                    >
+                      통합 검색
+                      <Search className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      onClick={() => navigate('/symbols')}
+                      aria-label="심볼 사전 보기"
+                      className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                    >
+                      심볼 사전
+                      <ChevronRight className="w-4 h-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  {recentDreams.slice(0, 3).map((dream) => (
+                    <RecentDreamCard key={dream.id} dream={dream} />
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {isAdvanced && isUHSEnabled && (
+              <section>
                 <UHSCard />
               </section>
             )}
           </>
-        )}
-
-        {/* Recent Dreams */}
-        {!isBeginner && recentDreams.length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">
-                최근 꿈
-              </h2>
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => navigate('/search')}
-                  aria-label="통합 검색 보기"
-                  className="flex items-center gap-1 text-sm text-blue-400 hover:text-blue-300 transition-colors"
-                >
-                  통합 검색
-                  <Search className="w-4 h-4" aria-hidden="true" />
-                </button>
-                <button
-                  onClick={() => navigate('/symbols')}
-                  aria-label="심볼 사전 보기"
-                  className="flex items-center gap-1 text-sm text-violet-400 hover:text-violet-300 transition-colors"
-                >
-                  심볼 사전
-                  <ChevronRight className="w-4 h-4" aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              {recentDreams.slice(0, 3).map((dream) => (
-                <RecentDreamCard key={dream.id} dream={dream} />
-              ))}
-            </div>
-          </section>
         )}
       </PageContainer>
 
@@ -948,26 +911,6 @@ function QuickActionCard({ icon: ActionIcon, label, sublabel, onClick, highlight
         </div>
         <span className="font-medium text-[var(--text-primary)]">{label}</span>
         <span className="text-xs text-[var(--text-muted)] mt-0.5">{sublabel}</span>
-      </div>
-    </Card>
-  );
-}
-
-/**
- * 통계 카드
- */
-function StatCard({ label, value, unit, icon: StatIcon }) {
-  return (
-    <Card padding="md">
-      <div className="flex flex-col items-center text-center">
-        <StatIcon className="w-5 h-5 text-[var(--text-muted)] mb-1" />
-        <span className="text-xl font-bold text-[var(--text-primary)]">
-          {value}
-          <span className="text-sm font-normal text-[var(--text-muted)]">
-            {unit}
-          </span>
-        </span>
-        <span className="text-xs text-[var(--text-muted)]">{label}</span>
       </div>
     </Card>
   );
