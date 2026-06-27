@@ -1,11 +1,11 @@
 /**
  * 설정 페이지
  */
-import { useCallback, useState } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import {
   User, Bell, Moon, Shield, Info, LogOut, ChevronRight,
   Smartphone, Heart, Database, Code, ToggleLeft, ToggleRight,
-  Download, Trash2, Sunrise, Clock3
+  Download, Trash2, Sunrise, Clock3, RefreshCw
 } from 'lucide-react';
 import { useShallow } from 'zustand/react/shallow';
 import {
@@ -23,6 +23,11 @@ import useSymbolStore from '../store/useSymbolStore';
 import useForecastStore from '../store/useForecastStore';
 import storage from '../lib/adapters/storage';
 import analytics from '../lib/adapters/analytics';
+import {
+  getDeadLetterCount,
+  subscribe as subscribeSyncQueue,
+} from '../lib/offline/syncQueue';
+import DeadLetterPanel from '../components/sync/DeadLetterPanel';
 
 export default function Settings() {
   const toast = useToast();
@@ -47,6 +52,16 @@ export default function Settings() {
   const [showDevMode, setShowDevMode] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteText, setDeleteText] = useState('');
+  const [deadLetterCount, setDeadLetterCount] = useState(() => getDeadLetterCount());
+  const [showDeadLetterPanel, setShowDeadLetterPanel] = useState(false);
+
+  // syncQueue dead letter 수 실시간 반영
+  useEffect(() => {
+    const unsub = subscribeSyncQueue(() => {
+      setDeadLetterCount(getDeadLetterCount());
+    });
+    return () => { unsub(); };
+  }, []);
 
   const trackSettingChange = useCallback((settingKey, newValue) => {
     analytics.track(analytics.events.SETTINGS_CHANGE, {
@@ -290,6 +305,14 @@ export default function Settings() {
 
           {/* 데이터 관리 */}
           <SettingSection title="데이터 관리">
+            {deadLetterCount > 0 && (
+              <SettingItem
+                icon={RefreshCw}
+                label="동기화 복구"
+                value={`${deadLetterCount}건 실패`}
+                onClick={() => setShowDeadLetterPanel(true)}
+              />
+            )}
             <SettingItem
               icon={Download}
               label="데이터 내보내기"
@@ -399,6 +422,12 @@ export default function Settings() {
             </div>
           </div>
         </Modal>
+        {/* 동기화 복구 패널 */}
+        <DeadLetterPanel
+          isOpen={showDeadLetterPanel}
+          onClose={() => setShowDeadLetterPanel(false)}
+        />
+
         {/* 데이터 삭제 확인 모달 */}
         <Modal
           isOpen={showDeleteConfirm}

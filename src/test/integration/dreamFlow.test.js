@@ -109,22 +109,24 @@ describe('Dream → Report 전체 플로우', () => {
   });
 
   it('꿈 2개 생성 → 심볼 빈도 누적', async () => {
-    // 첫 번째 꿈
+    // 첫 번째 꿈 (2026-06-27)
     const dream1 = await useDreamStore.getState().addDream({
       content: '바다에서 물고기를 봤다',
       userId: TEST_USER_ID,
       autoAnalyze: true,
+      date: '2026-06-27',
     });
 
     await vi.waitFor(() => {
       expect(useDreamStore.getState().getDreamById(dream1.id).analysis).not.toBeNull();
     });
 
-    // 두 번째 꿈 (같은 심볼)
+    // 두 번째 꿈 (2026-06-28, 같은 심볼) — 날짜 구분으로 dedup 방지
     const dream2 = await useDreamStore.getState().addDream({
       content: '다시 바다에 갔다',
       userId: TEST_USER_ID,
       autoAnalyze: true,
+      date: '2026-06-28',
     });
 
     await vi.waitFor(() => {

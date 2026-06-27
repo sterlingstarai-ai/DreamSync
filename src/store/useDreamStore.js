@@ -33,9 +33,43 @@ const useDreamStore = create(
        * @param {string} [params.voiceUrl] - 음성 녹음 URL
        * @param {string} params.userId - 사용자 ID
        * @param {boolean} [params.autoAnalyze=true] - 자동 분석 여부
+       * @param {string} [params.date] - 꿈 날짜 (YYYY-MM-DD). 미지정 시 오늘 날짜 사용.
        */
-      addDream: async ({ content, voiceUrl, userId, autoAnalyze = true }) => {
+      addDream: async ({ content, voiceUrl, userId, autoAnalyze = true, date: dateOverride }) => {
         set({ isLoading: true, error: null });
+
+        const today = dateOverride || getTodayString();
+
+        // Q3 dedup guard: (user_id, dream_date) 자연키 — 같은 날짜에 이미 꿈이 있으면
+        // 새 레코드를 생성하지 않고 기존 레코드를 upsert한다.
+        // 이는 DB의 dreams_user_date_unique + LWW 트리거 동작을 앱 계층에서 미러링한다.
+        // 소프트삭제(tombstone, deletedAt 존재)된 레코드는 중복 대상에서 제외한다.
+        const existingDream = get().dreams.find(
+          (d) => d.userId === userId && d.date === today && !d.deletedAt
+        );
+
+        if (existingDream) {
+          const now = new Date().toISOString();
+          const updatedDream = {
+            ...existingDream,
+            content,
+            voiceUrl: voiceUrl !== undefined ? (voiceUrl || existingDream.voiceUrl) : existingDream.voiceUrl,
+            ...createSyncMetadata({ updatedAt: now }),
+          };
+          set((state) => ({
+            dreams: state.dreams.map((d) => (d.id === existingDream.id ? updatedDream : d)),
+            isLoading: false,
+          }));
+          queueUpsert('dreams', updatedDream);
+          analytics.track(analytics.events.DREAM_CREATE_COMPLETE, {
+            content_length: content.length,
+            has_voice: Boolean(voiceUrl),
+          });
+          if (autoAnalyze) {
+            get().analyzeDream(existingDream.id);
+          }
+          return updatedDream;
+        }
 
         const now = new Date().toISOString();
         const dream = {
@@ -43,7 +77,7 @@ const useDreamStore = create(
           userId,
           content,
           voiceUrl: voiceUrl || null,
-          date: getTodayString(),
+          date: today,
           analysis: null,
           createdAt: now,
           ...createSyncMetadata({ updatedAt: now }),

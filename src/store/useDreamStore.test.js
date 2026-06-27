@@ -185,8 +185,9 @@ describe('useDreamStore', () => {
     });
 
     it('should remove dreamId from symbol on dream delete', async () => {
+      // Use explicit dates to avoid dedup (one dream per day policy).
       const dream = await useDreamStore.getState().addDream({
-        content: '바다에서 수영', userId: 'user-1', autoAnalyze: false,
+        content: '바다에서 수영', userId: 'user-1', autoAnalyze: false, date: '2026-06-27',
       });
 
       // Manually set analysis with symbols
@@ -203,9 +204,9 @@ describe('useDreamStore', () => {
         userId: 'user-1', name: '바다', meaning: '무의식', dreamId: dream.id,
       });
 
-      // Add a second dream referencing same symbol
+      // Add a second dream on a different date referencing same symbol
       const dream2 = await useDreamStore.getState().addDream({
-        content: '바다에서 서핑', userId: 'user-1', autoAnalyze: false,
+        content: '바다에서 서핑', userId: 'user-1', autoAnalyze: false, date: '2026-06-28',
       });
       useSymbolStore.getState().addOrUpdateSymbol({
         userId: 'user-1', name: '바다', meaning: '무의식', dreamId: dream2.id,

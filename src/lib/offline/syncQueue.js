@@ -359,3 +359,88 @@ export async function clearQueue() {
     lastError: null,
   });
 }
+
+/**
+ * Dead-letter 항목 목록 (읽기 전용 스냅숏).
+ * @returns {Array}
+ */
+export function getDeadLetterItems() {
+  return [...state.deadItems];
+}
+
+/**
+ * 특정 dead-letter 항목을 활성 큐로 복원(재시도).
+ * 재시도 카운터를 0으로 초기화하여 MAX_RETRIES 예산을 새로 부여한다.
+ * @param {string} id - dead letter 항목의 id
+ */
+export async function retryDeadLetterItem(id) {
+  const idx = state.deadItems.findIndex((item) => item.id === id);
+  if (idx === -1) return;
+
+  const [dead] = state.deadItems.splice(idx, 1);
+  await persistDead();
+
+  // dead letter 메타데이터 제거 + retries 초기화
+  const { lastError: _err, deadLetteredAt: _ts, ...rest } = dead;
+  const revived = { ...rest, retries: 0 };
+  state.items.push(revived);
+  await persist();
+
+  updateStatus({
+    status: state.status.isOnline ? 'syncing' : 'offline',
+    lastError: null,
+  });
+
+  if (state.status.isOnline) {
+    await flush();
+  }
+}
+
+/**
+ * 특정 dead-letter 항목을 영구 삭제 (수동 폐기).
+ * @param {string} id
+ */
+export async function removeDeadLetterItem(id) {
+  const before = state.deadItems.length;
+  state.deadItems = state.deadItems.filter((item) => item.id !== id);
+  if (state.deadItems.length === before) return; // not found — no-op
+
+  await persistDead();
+  notify();
+}
+
+/**
+ * 모든 dead-letter 항목을 활성 큐로 복원(전체 재시도).
+ */
+export async function retryAllDeadLetters() {
+  if (state.deadItems.length === 0) return;
+
+  const toRetry = state.deadItems.map(({ lastError: _e, deadLetteredAt: _t, ...rest }) => ({
+    ...rest,
+    retries: 0,
+  }));
+  state.deadItems = [];
+  await persistDead();
+
+  state.items.push(...toRetry);
+  await persist();
+
+  updateStatus({
+    status: state.status.isOnline ? 'syncing' : 'offline',
+    lastError: null,
+  });
+
+  if (state.status.isOnline) {
+    await flush();
+  }
+}
+
+/**
+ * 모든 dead-letter 항목을 영구 삭제 (전체 수동 폐기).
+ */
+export async function clearAllDeadLetters() {
+  if (state.deadItems.length === 0) return;
+  state.deadItems = [];
+  await persistDead();
+  notify();
+}
