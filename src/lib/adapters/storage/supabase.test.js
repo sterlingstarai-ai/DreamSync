@@ -92,7 +92,9 @@ describe('SupabaseStorageAdapter mapping', () => {
   });
 
   it('uses unique sync keys for idempotent multi-device upserts', () => {
-    expect(getEntityUpsertOptions('dreams')).toBeUndefined();
+    // dreams: Q3 마이그레이션 (user_id, dream_date) 자연키 유니크 제약 추가 후
+    // id-기반 기본 충돌 해소 대신 (user_id,dream_date) 충돌 시 UPDATE로 처리해야 함.
+    expect(getEntityUpsertOptions('dreams')).toEqual({ onConflict: 'user_id,dream_date' });
     expect(getEntityUpsertOptions('daily_logs')).toEqual({ onConflict: 'user_id,log_date' });
     expect(getEntityUpsertOptions('forecasts')).toEqual({ onConflict: 'user_id,forecast_date' });
     expect(getEntityUpsertOptions('personal_symbols')).toEqual({ onConflict: 'user_id,name' });

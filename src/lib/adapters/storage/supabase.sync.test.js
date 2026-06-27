@@ -59,7 +59,7 @@ describe('SupabaseStorageAdapter.syncPendingChanges wiring', () => {
     vi.unstubAllEnvs();
   });
 
-  it('forwards the onConflict option per entity and dreams without it', async () => {
+  it('forwards the onConflict option per entity including dreams (user_id,dream_date)', async () => {
     const result = await SupabaseStorageAdapter.syncPendingChanges([
       change('daily_logs', 'log-1', DAILY_LOG),
       change('forecasts', 'fc-1', { userId: 'u1', date: '2026-03-07', prediction: {}, createdAt: '2026-03-07T00:00:00.000Z' }),
@@ -73,7 +73,9 @@ describe('SupabaseStorageAdapter.syncPendingChanges wiring', () => {
     expect(byTable.forecasts).toEqual({ onConflict: 'user_id,forecast_date' });
     expect(byTable.personal_symbols).toEqual({ onConflict: 'user_id,name' });
     expect(byTable.coach_plans).toEqual({ onConflict: 'user_id,plan_date' });
-    expect(byTable.dreams).toBeUndefined();
+    // Q3 마이그레이션: (user_id, dream_date) 자연키 유니크 제약 추가 후
+    // dreams도 (user_id,dream_date) 충돌 시 UPDATE로 처리해야 멀티디바이스 동일날짜 꿈이 UNIQUE 위반 없이 병합됨.
+    expect(byTable.dreams).toEqual({ onConflict: 'user_id,dream_date' });
 
     expect(result.succeeded).toEqual(['q-log-1', 'q-fc-1', 'q-sym-1', 'q-cp-1', 'q-dream-1']);
     expect(result.failed).toEqual([]);

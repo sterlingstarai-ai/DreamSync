@@ -227,6 +227,7 @@ function mapRowToCoachPlan(row = {}) {
 const ENTITY_DEFINITIONS = {
   dreams: {
     table: 'dreams',
+    onConflict: 'user_id,dream_date',
     toRow: mapDreamToRow,
     fromRow: mapRowToDream,
   },
